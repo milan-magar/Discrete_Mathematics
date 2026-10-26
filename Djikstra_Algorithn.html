@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<!-- HTML2PDF for direct saving -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
 :root{
   --bg:#0a0904; --panel:#161208; --panel2:#1d170b; --ink:#ffb84a; --dim:#7a5f30; --paper:#f3e6c4;
@@ -280,7 +282,7 @@ const NODE_FONT  = 'italic 400 23px "Instrument Serif", serif';
 const MONO_FONT  = '600 11px "JetBrains Mono", monospace';
 
 const HINTS = {
-  select : 'Click empty space to add a node · drag nodes to move · drag on empty space to box-select · Backspace deletes the box contents',
+  select : 'Click empty space to add a node · drag nodes to move · drag on empty space to box-select · drag box edges to resize',
   connect: 'Click the first node, then the second, to create an edge',
   source : 'Click a node to make it the source',
   dest   : 'Click a node to set the destination (click it again to clear)',
@@ -328,6 +330,8 @@ let pendingConnect = null; // node id awaiting second click
 let dragNode = null;
 let dragOffset = {x:0, y:0};
 let dragGroup = null;      // For moving multiple selected nodes
+let activeHandle = null;   // For resizing the selection box ('tl', 'tr', 'move', etc.)
+let dragStartRect = null;
 let downPos = null;
 let moved = false;
 let mouse = {x:0, y:0};
@@ -455,6 +459,20 @@ function computeMarqueeSelection(r){
     if (pointInRect({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, r)) selE.add(e.id);
   }
   return { nodes: selN, edges: selE };
+}
+
+function getHandleAt(p, r) {
+  const thresh = 15; // generous hit area
+  if (Math.hypot(p.x - r.x1, p.y - r.y1) < thresh) return 'tl';
+  if (Math.hypot(p.x - r.x2, p.y - r.y1) < thresh) return 'tr';
+  if (Math.hypot(p.x - r.x1, p.y - r.y2) < thresh) return 'bl';
+  if (Math.hypot(p.x - r.x2, p.y - r.y2) < thresh) return 'br';
+  if (Math.abs(p.x - r.x1) < thresh && p.y > r.y1 && p.y < r.y2) return 'l';
+  if (Math.abs(p.x - r.x2) < thresh && p.y > r.y1 && p.y < r.y2) return 'r';
+  if (Math.abs(p.y - r.y1) < thresh && p.x > r.x1 && p.x < r.x2) return 't';
+  if (Math.abs(p.y - r.y2) < thresh && p.x > r.x1 && p.x < r.x2) return 'b';
+  if (p.x > r.x1 && p.x < r.x2 && p.y > r.y1 && p.y < r.y2) return 'move';
+  return null;
 }
 
 /* ============================================================
@@ -699,6 +717,26 @@ function drawMarquee(r, now){
   ctx.moveTo(x + t, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - t);
   ctx.stroke();
   ctx.restore();
+
+  // Resize handles (only when box is fully active, not while drawing)
+  if (!marqueeStart && !activeHandle) {
+    const hs = 6;
+    const drawHandle = (hx, hy) => {
+      ctx.fillStyle = '#ffb84a';
+      ctx.fillRect(hx - hs, hy - hs, hs * 2, hs * 2);
+      ctx.strokeStyle = '#0a0904';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(hx - hs, hy - hs, hs * 2, hs * 2);
+    };
+    drawHandle(x, y);
+    drawHandle(x + w, y);
+    drawHandle(x, y + h);
+    drawHandle(x + w, y + h);
+    drawHandle(x + w / 2, y);
+    drawHandle(x + w / 2, y + h);
+    drawHandle(x, y + h / 2);
+    drawHandle(x + w, y + h / 2);
+  }
 
   const live = computeMarqueeSelection(r);
   if (!live.nodes.size && !live.edges.size) return;
@@ -1008,6 +1046,7 @@ function resetAll(){
   marqueeStart = null;
   marquee = null;
   dragGroup = null;
+  activeHandle = null;
   clearMarqueeSel();
   clearLog();
   renderResults();
@@ -1099,6 +1138,7 @@ function updateInspector(){
         <b>Box selection active</b><br>
         ${mN} node${mN === 1 ? '' : 's'} · ${mE} edge${mE === 1 ? '' : 's'}<br><br>
         Drag a selected node to <b>move</b> the group.<br>
+        Drag the box edges/corners to <b>resize</b>.<br>
         Press <b>Backspace</b> / <b>Delete</b> to delete the selection.
       </div>
       <div class="row" style="margin-top:12px">
@@ -1208,6 +1248,7 @@ function deleteSelection(){
   if (pendingConnect != null && nIds.has(pendingConnect)) pendingConnect = null;
   if (dragNode && nIds.has(dragNode.id))      dragNode = null;
   dragGroup = null;
+  activeHandle = null;
 
   marqueeStart = null;
   marquee = null;
@@ -1344,6 +1385,22 @@ function onDown(ev){
       selNode = null;
       clearMarqueeSel();
       updateInspector();
+    } else if (marquee) {
+      const handle = getHandleAt(p, marquee);
+      if (handle) {
+        activeHandle = handle;
+        dragStartRect = { ...marquee };
+        downPos = p;
+        updateInspector();
+        return;
+      }
+      // clicked outside marquee
+      selNode = null;
+      selEdge = null;
+      clearMarqueeSel();
+      marqueeStart = { x: p.x, y: p.y };
+      marquee = null;
+      updateInspector();
     } else {
       // empty space → prepare a box drag
       selNode = null;
@@ -1387,6 +1444,30 @@ function onMove(ev){
 
   if (downPos && Math.hypot(p.x - downPos.x, p.y - downPos.y) > 5) moved = true;
 
+  if (activeHandle) {
+    const dx = p.x - downPos.x;
+    const dy = p.y - downPos.y;
+    if (activeHandle === 'move') {
+      marquee.x1 = dragStartRect.x1 + dx;
+      marquee.x2 = dragStartRect.x2 + dx;
+      marquee.y1 = dragStartRect.y1 + dy;
+      marquee.y2 = dragStartRect.y2 + dy;
+    } else {
+      if (activeHandle.includes('l')) marquee.x1 = dragStartRect.x1 + dx;
+      if (activeHandle.includes('r')) marquee.x2 = dragStartRect.x2 + dx;
+      if (activeHandle.includes('t')) marquee.y1 = dragStartRect.y1 + dy;
+      if (activeHandle.includes('b')) marquee.y2 = dragStartRect.y2 + dy;
+    }
+    if (marquee.x1 > marquee.x2) { const tmp = marquee.x1; marquee.x1 = marquee.x2; marquee.x2 = tmp; }
+    if (marquee.y1 > marquee.y2) { const tmp = marquee.y1; marquee.y1 = marquee.y2; marquee.y2 = tmp; }
+    if (marquee.x2 - marquee.x1 < 5) marquee.x2 = marquee.x1 + 5;
+    if (marquee.y2 - marquee.y1 < 5) marquee.y2 = marquee.y1 + 5;
+    
+    marqueeSel = computeMarqueeSelection(marquee);
+    updateInspector();
+    return;
+  }
+
   if (dragGroup){
     const dx = p.x - dragGroup.startX;
     const dy = p.y - dragGroup.startY;
@@ -1418,7 +1499,17 @@ function onMove(ev){
 }
 
 function updateCursor(n, e){
-  if (marquee)               canvas.style.cursor = 'crosshair';
+  if (activeHandle === 'move') canvas.style.cursor = 'move';
+  else if (activeHandle) canvas.style.cursor = 'crosshair';
+  else if (marquee) {
+    const handle = getHandleAt({x: mouse.x, y: mouse.y}, marquee);
+    if (handle === 'tl' || handle === 'br') canvas.style.cursor = 'nwse-resize';
+    else if (handle === 'tr' || handle === 'bl') canvas.style.cursor = 'nesw-resize';
+    else if (handle === 'l' || handle === 'r') canvas.style.cursor = 'ew-resize';
+    else if (handle === 't' || handle === 'b') canvas.style.cursor = 'ns-resize';
+    else if (handle === 'move') canvas.style.cursor = 'move';
+    else canvas.style.cursor = 'crosshair';
+  }
   else if (mode === 'erase') canvas.style.cursor = (n || e) ? 'pointer' : 'crosshair';
   else if (mode === 'connect') canvas.style.cursor = n ? 'pointer' : 'crosshair';
   else if (mode === 'source' || mode === 'dest') canvas.style.cursor = n ? 'pointer' : 'crosshair';
@@ -1432,6 +1523,13 @@ function updateCursor(n, e){
 
 function onUp(ev){
   if (!downPos) return;
+
+  if (activeHandle) {
+    activeHandle = null;
+    downPos = null;
+    moved = false;
+    return;
+  }
 
   const p = getPos(ev);
   const hadMarquee = !!marquee;
@@ -1460,7 +1558,9 @@ function onUp(ev){
   }
 
   marqueeStart = null;
-  marquee = null;
+  if (!(marqueeSel.nodes.size || marqueeSel.edges.size)) {
+    marquee = null;
+  }
   downPos = null;
   moved = false;
 }
@@ -1484,6 +1584,7 @@ window.addEventListener('keydown', ev => {
     marqueeStart = null;
     marquee = null;
     dragGroup = null;
+    activeHandle = null;
     clearMarqueeSel();
     if (!typing){ selNode = null; selEdge = null; updateInspector(); }
     else updateInspector();
@@ -1587,6 +1688,7 @@ function loadPreset(key){
   pendingConnect = null;
   dragNode = null;
   dragGroup = null;
+  activeHandle = null;
   runState = null;
   marqueeStart = null;
   marquee = null;
@@ -1647,6 +1749,7 @@ document.querySelectorAll('.tool').forEach(btn => {
     marqueeStart = null;
     marquee = null;
     dragGroup = null;
+    activeHandle = null;
     clearMarqueeSel();
     hintEl.textContent = HINTS[mode] || '';
     updateInspector();
@@ -1811,129 +1914,76 @@ $('pdfBtn').addEventListener('click', () => {
   const title = destId 
     ? `Dijkstra Algorithm to find shortest path from Source ${srcLabel} and Destination ${dstLabel}`
     : `Dijkstra Algorithm to find shortest path from Source ${srcLabel}`;
-
-  const resHtml = resultsBody.innerHTML;
-  const logHtml = logEl.innerHTML;
   
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Dijkstra Report</title>
-      <style>
-        @page { size: A4; margin: 10mm; }
-        body { 
-          font-family: Georgia, 'Times New Roman', Times, serif; 
-          color: #111; 
-          background: #fff; 
-          margin: 0; 
-          padding: 0; 
-        }
-        .page-border {
-          border: 3px solid #222;
-          padding: 30px;
-          min-height: 100vh;
-          display: flex;
-          flex-direction: column;
-        }
-        h1 { 
-          font-size: 24px; 
-          text-align: center;
-          margin-top: 0;
-          margin-bottom: 30px; 
-          border-bottom: 2px solid #333; 
-          padding-bottom: 10px; 
-          font-family: Helvetica, Arial, sans-serif;
-        }
-        h2 { 
-          font-size: 18px; 
-          margin-top: 30px; 
-          border-bottom: 1px solid #ccc; 
-          padding-bottom: 5px; 
-          font-family: Helvetica, Arial, sans-serif;
-        }
-        .img-container { 
-          text-align: center; 
-          margin: 30px 0; 
-        }
-        img { 
-          max-width: 100%; 
-          height: auto; 
-          display: block; 
-          margin: 0 auto; 
-          border: 1px solid #eee;
-          box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        table { 
-          width: 100%; 
-          border-collapse: collapse; 
-          font-size: 14px; 
-          margin-top: 10px; 
-          font-family: Helvetica, Arial, sans-serif;
-        }
-        th, td { 
-          border: 1px solid #ccc; 
-          padding: 10px; 
-          text-align: left; 
-        }
-        th { 
-          background: #f4f4f4; 
-          font-weight: bold;
-        }
-        td:first-child { 
-          font-weight: bold; 
-        }
-        td.costcell { 
-          color: #007700 !important; 
-          font-weight: bold; 
-        }
-        td.pathcell { 
-          color: #b35c00 !important; 
-        }
-        .log { 
-          font-family: 'Courier New', Courier, monospace; 
-          font-size: 13px; 
-          line-height: 1.5; 
-          white-space: pre-wrap; 
-          background: #fafafa; 
-          padding: 15px; 
-          border: 1px solid #ccc; 
-        }
-        .log-line { display: block; margin-bottom: 4px; }
-        .log-line.ok { color: #007700; }
-        .log-line.relax { color: #b35c00; }
-        .log-line.path { color: #000; font-weight: bold; }
-        .log-line.err { color: #cc0000; font-weight: bold; }
-        .log-line.muted { color: #555; }
-        .no-data { color: #666; font-style: italic; }
-      </style>
-    </head>
-    <body>
-      <div class="page-border">
-        <h1>${title}</h1>
-        
-        <h2>Graph</h2>
-        <div class="img-container">
-          <img src="${imgData}" />
-        </div>
-        
-        <h2>Solution</h2>
-        <div>${resHtml || '<p class="no-data">No solution computed. Run the algorithm first.</p>'}</div>
-        
-        <h2>Algorithm Log</h2>
-        <div class="log">${logHtml || '<p class="no-data">No log available.</p>'}</div>
+  const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const resHtml = resultsBody.innerHTML;
+  // Replace muted class with inline style for black color in PDF
+  const logHtml = logEl.innerHTML.replace(/class="log-line muted"/g, 'class="log-line muted" style="color:#000;"');
+
+  const pdfDiv = document.createElement('div');
+  pdfDiv.style.padding = '0';
+  pdfDiv.style.width = '210mm';
+  pdfDiv.innerHTML = `
+    <div style="font-family: Helvetica, Arial, sans-serif; color: #000; padding: 10mm;">
+      <div style="text-align: center; font-size: 12px; margin-bottom: 10px;">${dateStr}</div>
+      <h1 style="font-size: 20px; text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px;">${title}</h1>
+      
+      <h2 style="font-size: 16px; margin-top: 20px; border-bottom: 1px solid #ccc;">Graph</h2>
+      <div style="text-align: center; margin: 20px 0;">
+        <img src="${imgData}" style="max-width: 100%; height: auto; border: 1px solid #eee;" />
       </div>
       
-      <script>
-        window.onload = function() {
-          setTimeout(function() { window.print(); }, 300);
-        }
-      <\/script>
-    </body>
-    </html>
-  `);
-  printWindow.document.close();
+      <h2 style="font-size: 16px; margin-top: 20px; border-bottom: 1px solid #ccc;">Solution</h2>
+      <div style="font-size: 12px; font-family: Helvetica, Arial, sans-serif;">
+        ${resHtml || '<p style="color:#000; font-style: italic;">No solution computed.</p>'}
+      </div>
+      
+      <h2 style="font-size: 16px; margin-top: 20px; border-bottom: 1px solid #ccc;">Algorithm Log</h2>
+      <div style="font-family: 'Courier New', Courier, monospace; font-size: 11px; line-height: 1.5; background: #fafafa; padding: 10px; border: 1px solid #ccc;">
+        ${logHtml || '<p style="color:#000; font-style: italic;">No log available.</p>'}
+      </div>
+    </div>
+  `;
+  
+  const style = document.createElement('style');
+  style.innerHTML = `
+    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    th { background: #f4f4f4; font-weight: bold; }
+    td:first-child { font-weight: bold; }
+    td.costcell { color: #000; font-weight: bold; }
+    td.pathcell { color: #000; }
+    .log-line { display: block; margin-bottom: 2px; }
+    .log-line.ok { color: #000; font-weight: bold; }
+    .log-line.relax { color: #000; }
+    .log-line.path { color: #000; font-weight: bold; }
+    .log-line.err { color: #000; font-weight: bold; }
+    .log-line.muted { color: #000; }
+  `;
+  pdfDiv.appendChild(style);
+  document.body.appendChild(pdfDiv);
+
+  const opt = {
+    margin:       10,
+    filename:     'Dijkstra_Report.pdf',
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 2, useCORS: true },
+    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak:    { mode: ['css', 'legacy'] }
+  };
+
+  html2pdf().set(opt).from(pdfDiv).toPdf().get('pdf').then(function(pdf) {
+    const totalPages = pdf.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      pdf.setPage(i);
+      pdf.setDrawColor(0, 0, 0);
+      pdf.setLineWidth(1);
+      // Draw border at 5mm margin, size 200x287 (A4 is 210x297)
+      pdf.rect(5, 5, 200, 287);
+    }
+  }).save().then(() => {
+    document.body.removeChild(pdfDiv);
+  });
 });
 
 /* ============================================================
