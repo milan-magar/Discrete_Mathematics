@@ -49,7 +49,8 @@ button.ghost:hover{border-color:var(--ink);color:var(--ink)}
 button.danger{border-color:rgba(255,82,82,.45);color:var(--red)}
 button.danger:hover{background:var(--red);color:var(--bg);border-color:var(--red);box-shadow:0 0 18px rgba(255,82,82,.35)}
 
-.switch{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);user-select:none;cursor:pointer;padding:7px 10px;border:1px solid var(--line);transition:border-color .15s,color .15s;letter-spacing:.05em}
+/* directed toggle — a little longer now */
+.switch{display:inline-flex;align-items:center;gap:10px;font-size:12px;color:var(--dim);user-select:none;cursor:pointer;padding:8px 16px;min-width:128px;border:1px solid var(--line);transition:border-color .15s,color .15s;letter-spacing:.05em}
 .switch:hover{border-color:var(--line2);color:var(--ink)}
 .switch input{display:none}
 .switch .track{font-weight:700;color:var(--dim);width:3ch;flex:none}
@@ -81,7 +82,7 @@ select option{background:var(--panel);color:var(--ink)}
 
 .field{margin-bottom:12px}
 .field label{display:block;font-size:10px;color:var(--dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.14em}
-.field input{width:100%;padding:9px 11px;border-radius:0;border:1px solid var(--line2);background:var(--panel);color:var(--paper);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+.field input{width:100%;padding:9px 11px;border-radius:0;border:1px solid var(--line2);background:var(--panel);color:var(--paper);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;user-select:text;-webkit-user-select:text}
 .field input:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(255,184,74,.12)}
 .row{display:flex;gap:8px;margin-bottom:8px}
 .row button{flex:1;border-color:var(--line2);color:var(--body)}
@@ -141,7 +142,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 .modal-inner{padding:18px}
 @keyframes pop{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
 .modal-box h3{margin:0 0 14px;font-family:'Instrument Serif',serif;font-weight:400;font-size:26px;line-height:1.05;color:var(--paper);letter-spacing:-.01em}
-.modal-box input{width:100%;padding:11px 12px;border-radius:0;border:1px solid var(--line2);background:var(--bg);color:var(--ink);font-size:16px;font-family:inherit;outline:none}
+.modal-box input{width:100%;padding:11px 12px;border-radius:0;border:1px solid var(--line2);background:var(--bg);color:var(--ink);font-size:16px;font-family:inherit;outline:none;user-select:text;-webkit-user-select:text}
 .modal-box input:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(255,184,74,.14)}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
 
@@ -329,7 +330,7 @@ let moved = false;
 let mouse = {x:0, y:0};
 let hover = {node:null, edge:null};
 
-/* --- NEW: box / marquee selection ---------------------------- */
+/* --- box / marquee selection --------------------------------- */
 let marqueeStart = null;   // {x,y} origin of a box drag
 let marquee      = null;   // active rect {x1,y1,x2,y2}
 let marqueeSel   = { nodes: new Set(), edges: new Set() };
@@ -428,7 +429,7 @@ function edgeAt(p){
   return null;
 }
 
-/* --- NEW: marquee geometry ---------------------------------- */
+/* --- marquee geometry --------------------------------------- */
 function rectFromPoints(a, b){
   return {
     x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y),
@@ -669,7 +670,7 @@ function drawNode(n, now){
   }
 }
 
-/* --- NEW: the rubber-band box ------------------------------- */
+/* --- the rubber-band box ------------------------------------ */
 function drawMarquee(r, now){
   const x = r.x1, y = r.y1, w = r.x2 - r.x1, h = r.y2 - r.y1;
 
@@ -1022,7 +1023,7 @@ function updateInspector(){
     inspectorBody.innerHTML = `
       <div class="field">
         <label>Node Label</label>
-        <input id="inpLabel" maxlength="10" value="${esc(n.label)}">
+        <input id="inpLabel" maxlength="10" value="${esc(n.label)}" autocomplete="off" spellcheck="false">
       </div>
       <div class="row">
         <button id="btnSrc" class="${n.id === sourceId ? 'active' : ''}">Set as Source</button>
@@ -1035,9 +1036,13 @@ function updateInspector(){
     `;
 
     const inp = $('inpLabel');
-    inp.addEventListener('input', () => { n.label = inp.value; });
+    // live update while typing — the canvas redraws every frame, so no
+    // re-render of the inspector happens here (which would steal focus)
+    inp.addEventListener('input', () => {
+      n.label = inp.value;
+    });
     inp.addEventListener('change', () => {
-      if (!n.label.trim()) n.label = '?';
+      if (!inp.value.trim()){ n.label = '?'; }
       updateInspector();
     });
     $('btnSrc').addEventListener('click', () => setSource(n.id));
@@ -1053,7 +1058,7 @@ function updateInspector(){
     inspectorBody.innerHTML = `
       <div class="field">
         <label>Edge Weight</label>
-        <input id="inpWeight" type="number" step="any" min="0" value="${e.w}">
+        <input id="inpWeight" type="number" step="any" min="0" value="${e.w}" autocomplete="off">
       </div>
       <label class="check">
         <input type="checkbox" id="inpDir" ${e.directed ? 'checked' : ''}> Directed (one-way)
@@ -1064,9 +1069,16 @@ function updateInspector(){
       <div class="meta">${esc(labelOf(e.a))} ${e.directed ? '→' : '↔'} ${esc(labelOf(e.b))}</div>
     `;
 
-    $('inpWeight').addEventListener('input', ev => {
-      const v = parseFloat(ev.target.value);
+    const wInp = $('inpWeight');
+    wInp.addEventListener('input', () => {
+      const v = parseFloat(wInp.value);
       e.w = isNaN(v) ? 0 : Math.max(0, v);
+      invalidate();
+    });
+    wInp.addEventListener('change', () => {
+      const v = parseFloat(wInp.value);
+      e.w = isNaN(v) ? 0 : Math.max(0, v);
+      wInp.value = e.w;
       invalidate();
     });
     $('inpDir').addEventListener('change', ev => {
@@ -1160,14 +1172,14 @@ function deleteEdge(id){
   log(`× Deleted edge ${txt}`, 'muted');
 }
 
-/* --- NEW: clear the box selection ---------------------------- */
+/* --- clear the box selection -------------------------------- */
 function clearMarqueeSel(){
   if (marqueeSel.nodes.size || marqueeSel.edges.size){
     marqueeSel = { nodes: new Set(), edges: new Set() };
   }
 }
 
-/* --- NEW: delete everything inside the box ------------------- */
+/* --- delete everything inside the box ----------------------- */
 function deleteSelection(){
   const nIds = marqueeSel.nodes;
   const eIds = marqueeSel.edges;
@@ -1363,6 +1375,13 @@ function updateCursor(n, e){
 }
 
 function onUp(ev){
+  /* IMPORTANT: only finish gestures that actually started on the canvas.
+     Otherwise a click on the sidebar (label / weight inputs) would be
+     treated as a "click on empty canvas" and would both spawn a phantom
+     node and re-render the inspector — stealing focus from the field the
+     user just clicked into. */
+  if (!downPos) return;
+
   const p = getPos(ev);
   const hadMarquee = !!marquee;
 
@@ -1376,10 +1395,8 @@ function onUp(ev){
     const mN = marqueeSel.nodes.size, mE = marqueeSel.edges.size;
     if (mN || mE){
       log(`▣ Box selected ${mN} node${mN === 1 ? '' : 's'} · ${mE} edge${mE === 1 ? '' : 's'} — Backspace to delete`, 'muted');
-      updateInspector();
-    } else {
-      updateInspector();
     }
+    updateInspector();
   }
   else if (mode === 'select' && !moved){
     const n = nodeAt(p);
