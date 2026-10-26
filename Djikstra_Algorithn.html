@@ -153,40 +153,62 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
   font-family: 'Times New Roman', Times, serif; 
   color: #000; background: #fff; padding: 15mm; 
   width: 210mm; box-sizing: border-box; 
+  font-size: 14px;
+}
+.pdf-container * {
+  font-family: 'Times New Roman', Times, serif !important;
+  font-size: 14px;
 }
 .pdf-container h1 { 
-  font-size: 18pt; text-align: center; margin-bottom: 20pt; 
+  font-size: 24px !important; text-align: center; margin-bottom: 20pt; 
   border-bottom: 2pt solid #000; padding-bottom: 10pt; 
   word-wrap: break-word; white-space: normal; line-height: 1.3;
 }
 .pdf-container h2 { 
-  font-size: 14pt; margin-top: 20pt; 
+  font-size: 18px !important; margin-top: 20pt; 
   border-bottom: 1pt solid #000; padding-bottom: 5pt; 
 }
-.pdf-container .log-container { 
-  font-family: 'Courier New', monospace; font-size: 10pt; 
-  line-height: 1.4; white-space: pre-wrap; 
-  border: 1pt solid #000; padding: 10pt; 
+.pdf-container .paragraph-section {
+  margin-top: 20pt;
+  line-height: 1.6;
 }
-.pdf-container .log-container div { color: #000 !important; }
-.pdf-container .step-grid { 
-  display: grid; grid-template-columns: 1fr 1fr; gap: 15pt; margin-top: 15pt; 
-}
-.pdf-container .step-item { 
-  border: 1pt solid #000; padding: 10pt; text-align: center; page-break-inside: avoid; 
-}
-.pdf-container .step-caption { 
-  font-size: 9pt; font-family: 'Courier New', monospace; 
-  margin-top: 5pt; color: #000; 
+.pdf-container .paragraph-section p {
+  margin-bottom: 10pt;
+  text-align: justify;
 }
 .pdf-container table { 
-  width: 100%; border-collapse: collapse; font-size: 11pt; margin-top: 10pt; 
+  width: 100%; border-collapse: collapse; font-size: 14px !important; margin-top: 10pt; 
 }
 .pdf-container th, .pdf-container td { 
-  border: 1px solid #000; padding: 6pt; text-align: left; color: #000; 
+  border: 1px solid #000; padding: 6pt; text-align: left; color: #000; font-size: 14px !important;
 }
-.pdf-container th { background: #eee; color: #000; }
+.pdf-container th { background: #eee; color: #000; font-weight: bold; }
 .pdf-container td.costcell, .pdf-container td.pathcell { color: #000 !important; font-weight: normal; }
+
+.pdf-container .step-grid { 
+  width: 100%;
+  display: block;
+}
+.pdf-container .step-item { 
+  width: 48%;
+  display: inline-block;
+  vertical-align: top;
+  margin-bottom: 15pt;
+  box-sizing: border-box;
+  border: 1pt solid #000;
+  padding: 5pt;
+  text-align: center;
+  page-break-inside: avoid;
+}
+.pdf-container .step-item img {
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  object-fit: contain;
+}
+.pdf-container .step-caption { 
+  font-size: 14px !important; margin-top: 5pt; color: #000; line-height: 1.2;
+}
 
 @media (max-width:1100px){.clock{display:none}}
 @media (max-width:900px){.sidebar{width:280px}.brand{font-size:13px}.sys .opt{display:none}}
@@ -274,7 +296,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
         <div><span class="dot" style="background:#5a4522;color:#5a4522"></span>Unvisited</div>
       </div>
 
-      <div class="hint" id="hint">Click empty space to add a node · drag nodes to move · click to select</div>
+      <div class="hint" id="hint">Double-click empty space to add a node · drag nodes to move · click to select</div>
     </div>
   </div>
 </div>
@@ -322,7 +344,7 @@ const NODE_FONT  = 'italic 400 23px "Instrument Serif", serif';
 const MONO_FONT  = '600 11px "JetBrains Mono", monospace';
 
 const HINTS = {
-  select : 'Click empty space to add a node · drag nodes to move · drag on empty space to box-select · drag box edges to resize/rotate',
+  select : 'Double-click empty space to add a node · drag nodes to move · drag on empty space to box-select · drag box edges to resize/rotate',
   connect: 'Click the first node, then the second, to create an edge',
   source : 'Click a node to make it the source',
   dest   : 'Click a node to set the destination (click it again to clear)',
@@ -1196,8 +1218,7 @@ function updateInspector(){
   inspectorBody.innerHTML = `
     <div class="muted">
       Nothing selected.<br><br>
-      • Click a node or edge to inspect it.<br>
-      • Click empty canvas to add a node.<br>
+      • Double-click empty canvas to add a node.<br>
       • Drag on empty canvas to box-select.<br>
       • Use <b>Connect</b> mode to link two nodes.<br>
       • Enable <b>Directed</b> for one-way edges.
@@ -1515,7 +1536,6 @@ function onMove(ev){
         n.x = dragCenter.x + vx * Math.cos(angleDelta) - vy * Math.sin(angleDelta);
         n.y = dragCenter.y + vx * Math.sin(angleDelta) + vy * Math.cos(angleDelta);
       }
-      // Update marquee bounds to wrap the rotated nodes
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       for (const id of marqueeSel.nodes) {
         const n = byId(id);
@@ -1644,11 +1664,6 @@ function onUp(ev){
     }
     updateInspector();
   }
-  else if (mode === 'select' && !moved){
-    const n = nodeAt(p);
-    const e = n ? null : edgeAt(p);
-    if (!n && !e) addNodeAt(p);
-  }
 
   marqueeStart = null;
   if (!(marqueeSel.nodes.size || marqueeSel.edges.size)) {
@@ -1664,6 +1679,16 @@ window.addEventListener('pointerup', onUp);
 canvas.addEventListener('pointerleave', () => { hover.node = null; hover.edge = null; });
 
 canvas.addEventListener('contextmenu', ev => ev.preventDefault());
+
+canvas.addEventListener('dblclick', ev => {
+    if (mode !== 'select') return;
+    const p = getPos(ev);
+    const n = nodeAt(p);
+    const e = n ? null : edgeAt(p);
+    if (!n && !e && !marquee) {
+        addNodeAt(p);
+    }
+});
 
 /* ============================================================
    KEYBOARD
@@ -1862,7 +1887,7 @@ $('clearBtn').addEventListener('click', () => {
 /* ============================================================
    PDF EXPORT
    ============================================================ */
-function createStepCanvas(stepIdx, isBw) {
+function createStepCanvas(endIndex, group) {
     const pad = 80;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const n of nodes) {
@@ -1882,42 +1907,51 @@ function createStepCanvas(stepIdx, isBw) {
     ex.fillRect(0, 0, w, h);
     ex.translate(pad - minX, pad - minY);
 
-    let rs = null;
-    if (stepIdx >= 0) {
-        rs = { dist: new Map(), finalized: new Set(), flashEdgeId: null, pathNodes: new Set(), pathEdgeIds: new Set() };
-        for (const n of nodes) rs.dist.set(n.id, Infinity);
-        if (sourceId) rs.dist.set(sourceId, 0);
+    let rs = { dist: new Map(), finalized: new Set(), treeEdges: new Set() };
+    for (const n of nodes) rs.dist.set(n.id, Infinity);
+    if (sourceId) rs.dist.set(sourceId, 0);
 
-        for (let i = 0; i <= stepIdx; i++) {
+    let prevMap = new Map();
+
+    if (endIndex >= 0 && runState && runState.result) {
+        for (let i = 0; i <= endIndex; i++) {
             const s = runState.result.steps[i];
             if (s.type === 'finalize') {
                 rs.finalized.add(s.nodeId);
                 rs.dist.set(s.nodeId, s.d);
             } else {
                 rs.dist.set(s.nodeId, s.d);
-                rs.flashEdgeId = s.edgeId;
+                prevMap.set(s.nodeId, s.edgeId);
             }
         }
-    } else {
-        rs = { dist: new Map(), finalized: new Set(), flashEdgeId: null, pathNodes: new Set(), pathEdgeIds: new Set() };
-        for (const n of nodes) rs.dist.set(n.id, Infinity);
-        if (sourceId) rs.dist.set(sourceId, 0);
+    }
+
+    for (const eId of prevMap.values()) {
+        rs.treeEdges.add(eId);
     }
 
     for (const e of edges) {
         const a = byId(e.a), b = byId(e.b);
         if (!a || !b) continue;
         
-        const onPath = false;
-        const onTree = !!(rs && rs.showPath && rs.treeEdgeIds.has(e.id));
+        let isCurrentRelaxed = false;
+        if (group && group.relaxes) {
+            isCurrentRelaxed = group.relaxes.some(r => r.edgeId === e.id);
+        }
+        const inTree = rs.treeEdges.has(e.id);
         
         ex.beginPath();
         ex.moveTo(a.x, a.y);
         ex.lineTo(b.x, b.y);
         
-        if (onPath) { ex.strokeStyle = isBw ? '#000' : '#1d4ed8'; ex.lineWidth = 5; }
-        else if (onTree) { ex.strokeStyle = isBw ? '#666' : '#93c5fd'; ex.lineWidth = 4; }
-        else { ex.strokeStyle = isBw ? '#ccc' : '#9ca3af'; ex.lineWidth = 2.5; }
+        ex.strokeStyle = '#000';
+        if (isCurrentRelaxed) {
+            ex.lineWidth = 8;
+        } else if (inTree) {
+            ex.lineWidth = 4;
+        } else {
+            ex.lineWidth = 1.5;
+        }
         ex.stroke();
         
         if (e.directed) {
@@ -1935,49 +1969,55 @@ function createStepCanvas(stepIdx, isBw) {
             ex.lineTo(bx + px, by + py);
             ex.lineTo(bx - px, by - py);
             ex.closePath();
-            ex.fillStyle = onPath ? (isBw ? '#000' : '#1d4ed8') : (onTree ? (isBw ? '#666' : '#93c5fd') : (isBw ? '#ccc' : '#9ca3af'));
+            ex.fillStyle = '#000';
             ex.fill();
         }
         
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         const txt = fmtNum(e.w);
-        ex.font = 'bold 14px Helvetica, Arial, sans-serif';
+        ex.font = 'bold 14px "Times New Roman", Times, serif';
         const tw = ex.measureText(txt).width;
+        
+        // Offset the weight label slightly so it doesn't perfectly cover the line
         ex.fillStyle = '#ffffff';
-        ex.fillRect(mx - tw/2 - 6, my - 10, tw + 12, 20);
-        ex.fillStyle = isBw ? '#000' : '#374151';
+        ex.fillRect(mx - tw/2 - 2, my - 20, tw + 4, 16);
+        
+        ex.fillStyle = '#000';
         ex.textAlign = 'center'; ex.textBaseline = 'middle';
-        ex.fillText(txt, mx, my);
+        ex.fillText(txt, mx, my - 12);
     }
     
     for (const n of nodes) {
         const isSource = n.id === sourceId;
         const isDest = n.id === destId;
-        const isFinal = !!(rs && rs.finalized.has(n.id));
+        const isFinal = rs.finalized.has(n.id);
+        const isCurrentNode = (group && group.nodeId === n.id);
         
         ex.beginPath();
         ex.arc(n.x, n.y, R, 0, Math.PI * 2);
         ex.fillStyle = '#ffffff';
         ex.fill();
         
-        if (isSource) ex.strokeStyle = isBw ? '#000' : '#16a34a';
-        else if (isDest) ex.strokeStyle = isBw ? '#000' : '#dc2626';
-        else if (isFinal) ex.strokeStyle = isBw ? '#666' : '#d97706';
-        else ex.strokeStyle = isBw ? '#ccc' : '#4b5563';
-        
-        ex.lineWidth = 4;
+        ex.strokeStyle = '#000';
+        if (isCurrentNode) {
+            ex.lineWidth = 8;
+        } else if (isFinal || isSource || isDest) {
+            ex.lineWidth = 4;
+        } else {
+            ex.lineWidth = 1.5;
+        }
         ex.stroke();
         
-        ex.fillStyle = isBw ? '#000' : '#111827';
-        ex.font = 'bold 20px Helvetica, Arial, sans-serif';
+        ex.fillStyle = '#000';
+        ex.font = 'bold 20px "Times New Roman", Times, serif';
         ex.textAlign = 'center'; ex.textBaseline = 'middle';
         ex.fillText(n.label, n.x, n.y + 1);
         
         if (rs) {
             const d = rs.dist.get(n.id);
             if (d !== undefined && isFinite(d)) {
-                ex.font = 'bold 14px Helvetica, Arial, sans-serif';
-                ex.fillStyle = isBw ? '#000' : '#4b5563';
+                ex.font = 'bold 14px "Times New Roman", Times, serif';
+                ex.fillStyle = '#000';
                 ex.fillText('d=' + fmtNum(d), n.x, n.y + R + 16);
             }
         }
@@ -1986,10 +2026,51 @@ function createStepCanvas(stepIdx, isBw) {
     return c.toDataURL('image/png');
 }
 
+function generateParagraphSolution() {
+    if (!runState || !runState.result) return '<p>No algorithm run data available.</p>';
+    
+    const res = runState.result;
+    let text = `<p>The Dijkstra algorithm begins by initializing all node distances to infinity, except for the source node <strong>${labelOf(sourceId)}</strong>, which is set to 0. The algorithm then iteratively explores the closest unvisited nodes.</p>`;
+    
+    const steps = res.steps;
+    let para = '';
+    let stepCount = 0;
+    
+    for (let i = 0; i < steps.length; i++) {
+        const s = steps[i];
+        stepCount++;
+        
+        if (s.type === 'finalize') {
+            if (s.nodeId === sourceId) {
+                para += `<p><strong>Step ${stepCount}:</strong> The algorithm starts at the source node <strong>${labelOf(s.nodeId)}</strong> with a distance of 0. It is marked as finalized, and its neighbors are examined.</p>`;
+            } else {
+                const path = buildPathLabels(s.nodeId, res.prev, sourceId);
+                const pathStr = path.join(' → ');
+                para += `<p><strong>Step ${stepCount}:</strong> Node <strong>${labelOf(s.nodeId)}</strong> is finalized as the closest unvisited node, with a shortest distance of <strong>${fmtNum(s.d)}</strong>. The path to reach it is <strong>${pathStr}</strong>. The algorithm now evaluates the unvisited neighbors of this node.</p>`;
+            }
+            
+            if (destId != null && s.nodeId === destId) {
+                para += `<p>The destination node <strong>${labelOf(destId)}</strong> has been reached. The algorithm stops here, having found the shortest path.</p>`;
+                break;
+            }
+        }
+    }
+    
+    if (destId != null && res.path.length) {
+        para += `<p><strong>Conclusion:</strong> The shortest path from <strong>${labelOf(sourceId)}</strong> to <strong>${labelOf(destId)}</strong> is <strong>${res.path.map(labelOf).join(' → ')}</strong>, with a total distance of <strong>${fmtNum(res.dist.get(destId))}</strong>.</p>`;
+    } else if (destId != null) {
+        para += `<p><strong>Conclusion:</strong> There is no valid path from <strong>${labelOf(sourceId)}</strong> to <strong>${labelOf(destId)}</strong>.</p>`;
+    } else {
+        para += `<p><strong>Conclusion:</strong> All reachable nodes have been finalized. The shortest paths from <strong>${labelOf(sourceId)}</strong> to every node in the graph are now known and can be seen in the solution table.</p>`;
+    }
+    
+    return text + para;
+}
+
 $('pdfBtn').addEventListener('click', () => {
     if (nodes.length === 0) return log('⚠ Graph is empty.', 'err');
 
-    const imgData = createStepCanvas(-1, true);
+    const initialImgData = createStepCanvas(-1, null);
     
     const srcLabel = sourceId ? labelOf(sourceId) : 'N/A';
     const dstLabel = destId ? labelOf(destId) : 'N/A';
@@ -1999,46 +2080,94 @@ $('pdfBtn').addEventListener('click', () => {
     
     const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const resHtml = resultsBody.innerHTML;
-    const logHtml = logEl.innerHTML.replace(/class="[^"]*"/g, '');
-
-    let stepImagesHTML = '';
-    if (runState && runState.result) {
-        const steps = runState.result.steps;
-        for (let i = 0; i < steps.length; i++) {
-            const s = steps[i];
-            const img = createStepCanvas(i, true);
-            let desc = '';
-            if (s.type === 'finalize') desc = `Step ${i+1}: Current Node ${labelOf(s.nodeId)} (dist = ${fmtNum(s.d)})`;
-            else desc = `Step ${i+1}: Reachable ${labelOf(s.fromId)} → ${labelOf(s.nodeId)} (dist = ${fmtNum(s.d)})`;
-
-            stepImagesHTML += `
-              <div class="step-item">
-                <img src="${img}" style="max-width: 100%; height: auto;" />
-                <div class="step-caption">${desc}</div>
-              </div>
-            `;
-        }
-    }
+    const paragraphHtml = generateParagraphSolution();
 
     const pdfDiv = document.createElement('div');
     pdfDiv.className = 'pdf-container';
-    pdfDiv.innerHTML = `
-        <div style="text-align: center; font-size: 11pt; margin-bottom: 20pt;">${dateStr}</div>
+    
+    // PAGE 1: Title + Graph
+    const page1 = document.createElement('div');
+    page1.style.pageBreakAfter = 'always';
+    page1.innerHTML = `
+        <div style="text-align: center; font-size: 14px; margin-bottom: 20pt;">${dateStr}</div>
         <h1>${title}</h1>
-        
         <h2>Graph</h2>
         <div style="text-align: center; margin: 20pt 0;">
-            <img src="${imgData}" style="max-width: 100%; height: auto; border: 1pt solid #000;" />
+            <img src="${initialImgData}" style="max-width: 100%; height: auto; border: 1pt solid #000;" />
         </div>
-        
+    `;
+    pdfDiv.appendChild(page1);
+
+    // PAGE 2: Solution Table
+    const page2 = document.createElement('div');
+    page2.style.pageBreakAfter = 'always';
+    page2.innerHTML = `
         <h2>Solution</h2>
         <div>${resHtml || '<p style="font-style: italic;">No solution computed.</p>'}</div>
-        
-        <h2>Algorithm Log</h2>
-        <div class="log-container">${logHtml || '<p style="font-style: italic;">No log available.</p>'}</div>
-
-        ${stepImagesHTML ? `<h2 style="page-break-before: always;">Step-by-Step Graphs</h2><div class="step-grid">${stepImagesHTML}</div>` : ''}
     `;
+    pdfDiv.appendChild(page2);
+
+    // GROUP STEPS FOR PAGE 3+
+    if (runState && runState.result) {
+        let groupedSteps = [];
+        let currentGroup = null;
+        for (let i = 0; i < runState.result.steps.length; i++) {
+            let s = runState.result.steps[i];
+            if (s.type === 'finalize') {
+                if (currentGroup) groupedSteps.push(currentGroup);
+                currentGroup = { type: 'finalize', nodeId: s.nodeId, d: s.d, relaxes: [], startIndex: i, endIndex: i };
+            } else {
+                if (currentGroup) {
+                    currentGroup.relaxes.push(s);
+                    currentGroup.endIndex = i;
+                }
+            }
+        }
+        if (currentGroup) groupedSteps.push(currentGroup);
+
+        for (let i = 0; i < groupedSteps.length; i += 6) {
+            const pageDiv = document.createElement('div');
+            pageDiv.style.pageBreakAfter = 'always';
+            pageDiv.innerHTML = `<h2>Step-by-Step Graphs (${i+1} - ${Math.min(i+6, groupedSteps.length)})</h2>`;
+            
+            const grid = document.createElement('div');
+            grid.className = 'step-grid';
+            
+            for (let j = i; j < Math.min(i + 6, groupedSteps.length); j++) {
+                const group = groupedSteps[j];
+                const img = createStepCanvas(group.endIndex, group);
+                
+                let desc = `Step ${group.startIndex+1}-${group.endIndex+1}: Current Node ${labelOf(group.nodeId)} (dist = ${fmtNum(group.d)})`;
+                if (group.relaxes.length > 0) {
+                    let rStrs = group.relaxes.map(r => `${labelOf(r.nodeId)} (dist = ${fmtNum(r.d)})`);
+                    desc += `<br>Relaxed: ${rStrs.join(', ')}`;
+                }
+
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'step-item';
+                itemDiv.innerHTML = `
+                    <img src="${img}" />
+                    <div class="step-caption">${desc}</div>
+                `;
+                grid.appendChild(itemDiv);
+            }
+            pageDiv.appendChild(grid);
+            pdfDiv.appendChild(pageDiv);
+        }
+    }
+
+    // FINAL PAGE: Solution in Paragraphs
+    if (runState && runState.result) {
+        const pageFinal = document.createElement('div');
+        pageFinal.innerHTML = `
+            <h2>Solution Summary</h2>
+            <div class="paragraph-section">
+                ${paragraphHtml}
+            </div>
+        `;
+        pdfDiv.appendChild(pageFinal);
+    }
+
     document.body.appendChild(pdfDiv);
 
     const opt = {
