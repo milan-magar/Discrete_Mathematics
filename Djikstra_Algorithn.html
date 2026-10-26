@@ -173,8 +173,10 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
   line-height: 1.6;
 }
 .pdf-container .paragraph-section p {
-  margin-bottom: 10pt;
+  margin-bottom: 12pt;
   text-align: justify;
+  text-indent: -4em;
+  padding-left: 4em;
 }
 .pdf-container table { 
   width: 100%; border-collapse: collapse; font-size: 14px !important; margin-top: 10pt; 
@@ -191,6 +193,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 }
 .pdf-container .step-item { 
   width: 48%;
+  height: 270px;
   display: inline-block;
   vertical-align: top;
   margin-bottom: 15pt;
@@ -202,12 +205,17 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 }
 .pdf-container .step-item img {
   width: 100%;
-  height: auto;
-  max-height: 220px;
+  height: 210px;
   object-fit: contain;
+  display: block;
+  margin: 0 auto;
 }
 .pdf-container .step-caption { 
   font-size: 14px !important; margin-top: 5pt; color: #000; line-height: 1.2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
 }
 
 @media (max-width:1100px){.clock{display:none}}
@@ -257,7 +265,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
     <span>NODES: <b id="sysNodes">0</b></span>
     <span>EDGES: <b id="sysEdges">0</b></span>
     <span>SRC: <b id="sysSrc">—</b></span>
-    <span>DST: <b id="sysDst">—</b></span>
+    <span>DST: <b id="sysDst">ALL</b></span>
     <span class="opt">MODE: <b id="sysMode">SELECT</b></span>
     <span class="st" id="sysStatWrap">STATUS: <b id="sysStat">IDLE</b></span>
   </div>
@@ -347,7 +355,7 @@ const HINTS = {
   select : 'Double-click empty space to add a node · drag nodes to move · drag on empty space to box-select · drag box edges to resize/rotate',
   connect: 'Click the first node, then the second, to create an edge',
   source : 'Click a node to make it the source',
-  dest   : 'Click a node to set the destination (click it again to clear)',
+  dest   : 'Click a node to toggle it as a destination',
   erase  : 'Click a node or an edge to delete it'
 };
 
@@ -382,7 +390,7 @@ let mode         = 'select';
 let directedMode = false;
 
 let sourceId = null;
-let destId   = null;
+let destIds  = new Set();
 
 let selNode = null;
 let selEdge = null;
@@ -641,7 +649,7 @@ function drawNode(n, now){
   const onPath  = !!(rs && rs.showPath && rs.pathNodes.has(n.id));
   const isFinal = !!(rs && rs.finalized.has(n.id));
   const isSource = n.id === sourceId;
-  const isDest   = n.id === destId;
+  const isDest   = destIds.has(n.id);
   const isSel    = selNode === n.id;
   const isHover  = hover.node === n.id;
   const isMarq   = marqueeSel.nodes.has(n.id);
@@ -898,6 +906,8 @@ function computeDijkstra(){
   dist.set(sourceId, 0);
 
   const pq = [{ id: sourceId, d: 0 }];
+  const destArray = Array.from(destIds);
+  const foundDests = new Set();
 
   while (pq.length){
     let bi = 0;
@@ -908,9 +918,10 @@ function computeDijkstra(){
     if (cur.d > dist.get(cur.id)) continue;
     visited.add(cur.id);
 
-    steps.push({ type:'finalize', nodeId: cur.id, d: cur.d });
+    if (destIds.has(cur.id)) foundDests.add(cur.id);
+    if (destArray.length > 0 && foundDests.size === destArray.length) break;
 
-    if (destId != null && cur.id === destId) break;
+    steps.push({ type:'finalize', nodeId: cur.id, d: cur.d });
 
     for (const e of edges){
       let nb = null;
@@ -933,24 +944,10 @@ function computeDijkstra(){
     }
   }
 
-  let path = [], pathEdges = [];
-  if (destId != null && isFinite(dist.get(destId))){
-    let cur = destId;
-    const guard = new Set();
-    while (cur != null && !guard.has(cur)){
-      guard.add(cur);
-      path.unshift(cur);
-      const p = prev.get(cur);
-      if (p){ pathEdges.unshift(p.edgeId); cur = p.from; }
-      else cur = null;
-    }
-    if (path[0] !== sourceId){ path = []; pathEdges = []; }
-  }
-
   const treeEdges = [];
   for (const v of prev.values()) treeEdges.push(v.edgeId);
 
-  return { dist, prev, steps, path, pathEdges, treeEdges };
+  return { dist, prev, steps, treeEdges };
 }
 
 /* ============================================================
@@ -967,7 +964,7 @@ function startRun(){
 
   clearLog();
   log(`▶ Running Dijkstra from ${labelOf(sourceId)}` +
-      (destId != null ? ` → ${labelOf(destId)}` : ' to all nodes'), 'muted');
+      (destIds.size === 0 ? ' to all nodes' : ` to ${destIds.size} destination(s)`), 'muted');
 
   const interval = Math.max(45, Math.min(220, 2600 / Math.max(1, res.steps.length)));
 
@@ -1012,14 +1009,34 @@ function finishRun(now){
   const res = rs.result;
   rs.showPath = true;
 
-  if (destId != null){
-    if (res.path.length){
-      res.path.forEach(id => rs.pathNodes.add(id));
-      res.pathEdges.forEach(id => rs.pathEdgeIds.add(id));
-      log(`★ Path: ${res.path.map(labelOf).join(' → ')}`, 'path');
-      log(`★ Total cost: ${fmtNum(res.dist.get(destId))}`, 'path');
-    } else {
-      log(`✗ ${labelOf(sourceId)} cannot reach ${labelOf(destId)}`, 'err');
+  if (destIds.size > 0) {
+    for (const dId of destIds) {
+      if (isFinite(res.dist.get(dId))) {
+        let cur = dId;
+        const guard = new Set();
+        while (cur != null && !guard.has(cur)) {
+          guard.add(cur);
+          rs.pathNodes.add(cur);
+          const p = res.prev.get(cur);
+          if (p) {
+            rs.pathEdgeIds.add(p.edgeId);
+            cur = p.from;
+          } else {
+            cur = null;
+          }
+        }
+        if (destIds.size === 1) {
+          log(`★ Path: ${buildPathLabels(dId, res.prev, sourceId).join(' → ')}`, 'path');
+          log(`★ Total cost: ${fmtNum(res.dist.get(dId))}`, 'path');
+        }
+      } else {
+        if (destIds.size === 1) {
+          log(`✗ ${labelOf(sourceId)} cannot reach ${labelOf(dId)}`, 'err');
+        }
+      }
+    }
+    if (destIds.size > 1) {
+       log(`★ Paths to ${destIds.size} destinations computed`, 'path');
     }
   } else {
     res.treeEdges.forEach(id => rs.treeEdgeIds.add(id));
@@ -1065,11 +1082,15 @@ function renderResults(){
     return;
   }
   const res = runState.result;
-  const sorted = nodes.slice().sort((a, b) => a.label.localeCompare(b.label, undefined, {numeric:true}));
+  
+  let nodesToShow = nodes.slice().sort((a, b) => a.label.localeCompare(b.label, undefined, {numeric:true}));
+  if (destIds.size > 0) {
+    nodesToShow = nodesToShow.filter(n => destIds.has(n.id));
+  }
 
   let rows = '';
   let count = 0;
-  for (const n of sorted){
+  for (const n of nodesToShow){
     const d = res.dist.get(n.id);
     if (d === undefined || !isFinite(d)) continue;
     count++;
@@ -1133,7 +1154,7 @@ function updateInspector(){
       </div>
       <div class="row">
         <button id="btnSrc" class="${n.id === sourceId ? 'active' : ''}">Set as Source</button>
-        <button id="btnDst" class="${n.id === destId ? 'active' : ''}">Set as Dest</button>
+        <button id="btnDst" class="${destIds.has(n.id) ? 'active' : ''}">${destIds.has(n.id) ? 'Remove Dest' : 'Set as Dest'}</button>
       </div>
       <div class="row">
         <button class="danger" id="btnDelNode">Delete Node</button>
@@ -1230,17 +1251,20 @@ function updateInspector(){
    ============================================================ */
 function setSource(id){
   sourceId = id;
-  if (destId === id) destId = null;
+  if (destIds.has(id)) destIds.delete(id);
   invalidate();
   updateInspector();
   log(`▶ Source set to ${labelOf(id)}`, 'ok');
 }
 
 function setDest(id){
-  destId = (destId === id) ? null : id;
+  if (destIds.has(id)) destIds.delete(id);
+  else destIds.add(id);
   invalidate();
   updateInspector();
-  log(destId != null ? `◎ Destination set to ${labelOf(id)}` : '◎ Destination cleared', 'ok');
+  if (destIds.size === 0) log(`◎ Destinations cleared (showing all)`, 'ok');
+  else if (destIds.size === 1) log(`◎ Destination set to ${labelOf([...destIds][0])}`, 'ok');
+  else log(`◎ ${destIds.size} destinations selected`, 'ok');
 }
 
 function addNodeAt(p){
@@ -1257,7 +1281,7 @@ function deleteNode(id){
   nodes = nodes.filter(n => n.id !== id);
   edges = edges.filter(e => e.a !== id && e.b !== id);
   if (sourceId === id) sourceId = null;
-  if (destId === id)   destId = null;
+  if (destIds.has(id)) destIds.delete(id);
   if (selNode === id)  selNode = null;
   if (pendingConnect === id) pendingConnect = null;
   if (dragNode && dragNode.id === id) dragNode = null;
@@ -1299,7 +1323,9 @@ function deleteSelection(){
   nodes = nodes.filter(n => !nIds.has(n.id));
 
   if (sourceId != null && nIds.has(sourceId)) sourceId = null;
-  if (destId != null && nIds.has(destId))     destId = null;
+  if (destIds.size > 0) {
+    for (const id of nIds) destIds.delete(id);
+  }
   if (selNode != null && nIds.has(selNode))   selNode = null;
   if (selEdge != null && eIds.has(selEdge))   selEdge = null;
   if (pendingConnect != null && nIds.has(pendingConnect)) pendingConnect = null;
@@ -1782,7 +1808,7 @@ function loadPreset(key){
   nodeSeq = 1;
   edgeSeq = 1;
   sourceId = null;
-  destId = null;
+  destIds = new Set();
   selNode = null;
   selEdge = null;
   pendingConnect = null;
@@ -1879,7 +1905,7 @@ $('clearBtn').addEventListener('click', () => {
   nodeSeq = 1;
   edgeSeq = 1;
   sourceId = null;
-  destId = null;
+  destIds = new Set();
   resetAll();
   log('Graph cleared.', 'muted');
 });
@@ -1887,7 +1913,7 @@ $('clearBtn').addEventListener('click', () => {
 /* ============================================================
    PDF EXPORT
    ============================================================ */
-function createStepCanvas(endIndex, group) {
+function createStepCanvas(endIndex, group, isSolutionGraph) {
     const pad = 80;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const n of nodes) {
@@ -1929,27 +1955,48 @@ function createStepCanvas(endIndex, group) {
     for (const eId of prevMap.values()) {
         rs.treeEdges.add(eId);
     }
+    
+    let pathEdges = new Set();
+    if (isSolutionGraph && runState && runState.result) {
+        if (destIds.size === 0) {
+            for (const eId of rs.treeEdges) pathEdges.add(eId);
+        } else {
+            for (const d of destIds) {
+                let cur = d;
+                const guard = new Set();
+                while(cur != null && !guard.has(cur)) {
+                    guard.add(cur);
+                    const p = runState.result.prev.get(cur);
+                    if (p) { pathEdges.add(p.edgeId); cur = p.from; }
+                    else break;
+                }
+            }
+        }
+    }
 
     for (const e of edges) {
         const a = byId(e.a), b = byId(e.b);
         if (!a || !b) continue;
         
-        let isCurrentRelaxed = false;
-        if (group && group.relaxes) {
-            isCurrentRelaxed = group.relaxes.some(r => r.edgeId === e.id);
-        }
+        const isCurrentRelaxed = (group && group.relaxes && group.relaxes.some(r => r.edgeId === e.id));
         const inTree = rs.treeEdges.has(e.id);
+        const inPath = isSolutionGraph && pathEdges.has(e.id);
         
         ex.beginPath();
         ex.moveTo(a.x, a.y);
         ex.lineTo(b.x, b.y);
         
-        ex.strokeStyle = '#000';
-        if (isCurrentRelaxed) {
+        if (inPath) {
+            ex.strokeStyle = '#1d4ed8'; // Blue for solution path
+            ex.lineWidth = 6;
+        } else if (isCurrentRelaxed) {
+            ex.strokeStyle = '#1d4ed8'; // Blue for current edge
             ex.lineWidth = 8;
         } else if (inTree) {
+            ex.strokeStyle = '#000'; // Black for tree
             ex.lineWidth = 4;
         } else {
+            ex.strokeStyle = '#000';
             ex.lineWidth = 1.5;
         }
         ex.stroke();
@@ -1969,7 +2016,7 @@ function createStepCanvas(endIndex, group) {
             ex.lineTo(bx + px, by + py);
             ex.lineTo(bx - px, by - py);
             ex.closePath();
-            ex.fillStyle = '#000';
+            ex.fillStyle = inPath || isCurrentRelaxed ? '#1d4ed8' : '#000';
             ex.fill();
         }
         
@@ -1989,9 +2036,10 @@ function createStepCanvas(endIndex, group) {
     
     for (const n of nodes) {
         const isSource = n.id === sourceId;
-        const isDest = n.id === destId;
+        const isDest = destIds.has(n.id);
         const isFinal = rs.finalized.has(n.id);
         const isCurrentNode = (group && group.nodeId === n.id);
+        const onPath = isSolutionGraph && (destIds.has(n.id) || (isSolutionGraph && pathEdges.size > 0 && rs.treeEdges.size > 0));
         
         ex.beginPath();
         ex.arc(n.x, n.y, R, 0, Math.PI * 2);
@@ -1999,9 +2047,9 @@ function createStepCanvas(endIndex, group) {
         ex.fill();
         
         ex.strokeStyle = '#000';
-        if (isCurrentNode) {
+        if (isCurrentNode || (isSolutionGraph && destIds.has(n.id))) {
             ex.lineWidth = 8;
-        } else if (isFinal || isSource || isDest) {
+        } else if (isFinal || isSource) {
             ex.lineWidth = 4;
         } else {
             ex.lineWidth = 1.5;
@@ -2026,42 +2074,75 @@ function createStepCanvas(endIndex, group) {
     return c.toDataURL('image/png');
 }
 
+function getGroupedSteps(steps) {
+    let groupedSteps = [];
+    let currentRelaxGroup = null;
+    for (let i = 0; i < steps.length; i++) {
+        const s = steps[i];
+        if (s.type === 'finalize') {
+            if (currentRelaxGroup) {
+                groupedSteps.push(currentRelaxGroup);
+                currentRelaxGroup = null;
+            }
+            groupedSteps.push({ type: 'finalize', nodeId: s.nodeId, d: s.d, stepIndex: i });
+        } else if (s.type === 'relax') {
+            if (!currentRelaxGroup) {
+                currentRelaxGroup = { type: 'relax', relaxes: [], stepIndex: i };
+            }
+            currentRelaxGroup.relaxes.push(s);
+        }
+    }
+    if (currentRelaxGroup) groupedSteps.push(currentRelaxGroup);
+    return groupedSteps;
+}
+
 function generateParagraphSolution() {
     if (!runState || !runState.result) return '<p>No algorithm run data available.</p>';
     
     const res = runState.result;
     let text = `<p>The Dijkstra algorithm begins by initializing all node distances to infinity, except for the source node <strong>${labelOf(sourceId)}</strong>, which is set to 0. The algorithm then iteratively explores the closest unvisited nodes.</p>`;
     
-    const steps = res.steps;
+    const groupedSteps = getGroupedSteps(res.steps);
     let para = '';
-    let stepCount = 0;
     
-    for (let i = 0; i < steps.length; i++) {
-        const s = steps[i];
-        stepCount++;
+    for (let i = 0; i < groupedSteps.length; i++) {
+        const group = groupedSteps[i];
         
-        if (s.type === 'finalize') {
-            if (s.nodeId === sourceId) {
-                para += `<p><strong>Step ${stepCount}:</strong> The algorithm starts at the source node <strong>${labelOf(s.nodeId)}</strong> with a distance of 0. It is marked as finalized, and its neighbors are examined.</p>`;
+        if (group.type === 'finalize') {
+            if (group.nodeId === sourceId) {
+                para += `<p><strong><u>Step ${group.stepIndex + 1}:</u></strong> The algorithm starts at the source node <strong>${labelOf(group.nodeId)}</strong> with a distance of 0. It is marked as finalized, and its neighbors are examined.</p>`;
             } else {
-                const path = buildPathLabels(s.nodeId, res.prev, sourceId);
+                const path = buildPathLabels(group.nodeId, res.prev, sourceId);
                 const pathStr = path.join(' → ');
-                para += `<p><strong>Step ${stepCount}:</strong> Node <strong>${labelOf(s.nodeId)}</strong> is finalized as the closest unvisited node, with a shortest distance of <strong>${fmtNum(s.d)}</strong>. The path to reach it is <strong>${pathStr}</strong>. The algorithm now evaluates the unvisited neighbors of this node.</p>`;
+                para += `<p><strong><u>Step ${group.stepIndex + 1}:</u></strong> Node <strong>${labelOf(group.nodeId)}</strong> is finalized as the closest unvisited node, with a shortest distance of <strong>${fmtNum(group.d)}</strong>. The path to reach it is <strong>${pathStr}</strong>. The algorithm now evaluates the unvisited neighbors of this node.</p>`;
             }
             
-            if (destId != null && s.nodeId === destId) {
-                para += `<p>The destination node <strong>${labelOf(destId)}</strong> has been reached. The algorithm stops here, having found the shortest path.</p>`;
+            if (destIds.size === 1 && group.nodeId === [...destIds][0]) {
+                para += `<p>The destination node <strong>${labelOf(group.nodeId)}</strong> has been reached. The algorithm stops here, having found the shortest path.</p>`;
                 break;
             }
+        } else {
+            const startStr = group.stepIndex + 1;
+            const endStr = startStr + group.relaxes.length - 1;
+            const stepStr = startStr === endStr ? `Step ${startStr}` : `Step ${startStr}-${endStr}`;
+            
+            let rStrs = group.relaxes.map(r => `<strong>${labelOf(r.nodeId)}</strong> (dist = ${fmtNum(r.d)})`);
+            para += `<p><strong><u>${stepStr}:</u></strong> The algorithm relaxes the edges to the following reachable nodes: ${rStrs.join(', ')}.</p>`;
         }
     }
     
-    if (destId != null && res.path.length) {
-        para += `<p><strong>Conclusion:</strong> The shortest path from <strong>${labelOf(sourceId)}</strong> to <strong>${labelOf(destId)}</strong> is <strong>${res.path.map(labelOf).join(' → ')}</strong>, with a total distance of <strong>${fmtNum(res.dist.get(destId))}</strong>.</p>`;
-    } else if (destId != null) {
-        para += `<p><strong>Conclusion:</strong> There is no valid path from <strong>${labelOf(sourceId)}</strong> to <strong>${labelOf(destId)}</strong>.</p>`;
+    if (destIds.size === 1) {
+        const dId = [...destIds][0];
+        if (isFinite(res.dist.get(dId))) {
+            const path = buildPathLabels(dId, res.prev, sourceId).join(' → ');
+            para += `<p><strong>Conclusion:</strong> The shortest path from <strong>${labelOf(sourceId)}</strong> to <strong>${labelOf(dId)}</strong> is <strong>${path}</strong>, with a total distance of <strong>${fmtNum(res.dist.get(dId))}</strong>.</p>`;
+        } else {
+            para += `<p><strong>Conclusion:</strong> There is no valid path from <strong>${labelOf(sourceId)}</strong> to <strong>${labelOf(dId)}</strong>.</p>`;
+        }
+    } else if (destIds.size > 1) {
+        para += `<p><strong>Conclusion:</strong> All selected destinations have been reached. The shortest paths to these nodes are shown in the final table below.</p>`;
     } else {
-        para += `<p><strong>Conclusion:</strong> All reachable nodes have been finalized. The shortest paths from <strong>${labelOf(sourceId)}</strong> to every node in the graph are now known and can be seen in the solution table.</p>`;
+        para += `<p><strong>Conclusion:</strong> All reachable nodes have been finalized. The shortest paths from <strong>${labelOf(sourceId)}</strong> to every node in the graph are now known and can be seen in the final table below.</p>`;
     }
     
     return text + para;
@@ -2070,13 +2151,17 @@ function generateParagraphSolution() {
 $('pdfBtn').addEventListener('click', () => {
     if (nodes.length === 0) return log('⚠ Graph is empty.', 'err');
 
-    const initialImgData = createStepCanvas(-1, null);
+    const initialImgData = createStepCanvas(-1, null, false);
+    const finalImgData = createStepCanvas(-1, null, true);
     
     const srcLabel = sourceId ? labelOf(sourceId) : 'N/A';
-    const dstLabel = destId ? labelOf(destId) : 'N/A';
-    const title = destId 
-        ? `Dijkstra Algorithm to find shortest path from Source ${srcLabel} and Destination ${dstLabel}`
-        : `Dijkstra Algorithm to find shortest path from Source ${srcLabel}`;
+    let dstLabel = 'ALL';
+    if (destIds.size === 1) {
+        dstLabel = labelOf([...destIds][0]);
+    } else if (destIds.size > 1) {
+        dstLabel = Array.from(destIds).map(id => labelOf(id)).join(', ');
+    }
+    const title = `Dijkstra Algorithm to find shortest path from Source ${srcLabel} to ${dstLabel}`;
     
     const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const resHtml = resultsBody.innerHTML;
@@ -2085,10 +2170,12 @@ $('pdfBtn').addEventListener('click', () => {
     const pdfDiv = document.createElement('div');
     pdfDiv.className = 'pdf-container';
     
-    // PAGE 1: Title + Graph
+    const isSingleDest = (destIds.size === 1);
+
+    // PAGE 1: Title + Graph (+ Solution Table if 1 dest)
     const page1 = document.createElement('div');
     page1.style.pageBreakAfter = 'always';
-    page1.innerHTML = `
+    let page1HTML = `
         <div style="text-align: center; font-size: 14px; margin-bottom: 20pt;">${dateStr}</div>
         <h1>${title}</h1>
         <h2>Graph</h2>
@@ -2096,51 +2183,65 @@ $('pdfBtn').addEventListener('click', () => {
             <img src="${initialImgData}" style="max-width: 100%; height: auto; border: 1pt solid #000;" />
         </div>
     `;
+    if (isSingleDest) {
+        page1HTML += `<h2>Solution</h2><div>${resHtml}</div>`;
+    }
+    page1.innerHTML = page1HTML;
     pdfDiv.appendChild(page1);
 
-    // PAGE 2: Solution Table
-    const page2 = document.createElement('div');
-    page2.style.pageBreakAfter = 'always';
-    page2.innerHTML = `
-        <h2>Solution</h2>
-        <div>${resHtml || '<p style="font-style: italic;">No solution computed.</p>'}</div>
-    `;
-    pdfDiv.appendChild(page2);
+    // PAGE 2: Solution Table (if multiple dests)
+    if (!isSingleDest) {
+        const page2 = document.createElement('div');
+        page2.style.pageBreakAfter = 'always';
+        page2.innerHTML = `
+            <h2>Solution</h2>
+            <div>${resHtml || '<p style="font-style: italic;">No solution computed.</p>'}</div>
+        `;
+        pdfDiv.appendChild(page2);
+    }
 
-    // GROUP STEPS FOR PAGE 3+
+    // FINAL GRAPH
+    const pageFinalGraph = document.createElement('div');
+    pageFinalGraph.style.pageBreakAfter = 'always';
+    pageFinalGraph.innerHTML = `
+        <h2>Final Solution Graph</h2>
+        <div style="text-align: center; margin: 20pt 0;">
+            <img src="${finalImgData}" style="max-width: 100%; height: auto; border: 1pt solid #000;" />
+        </div>
+    `;
+    pdfDiv.appendChild(pageFinalGraph);
+
+    // PAGE 3+: Step-by-step (max 6 per page)
     if (runState && runState.result) {
-        let groupedSteps = [];
-        let currentGroup = null;
-        for (let i = 0; i < runState.result.steps.length; i++) {
-            let s = runState.result.steps[i];
-            if (s.type === 'finalize') {
-                if (currentGroup) groupedSteps.push(currentGroup);
-                currentGroup = { type: 'finalize', nodeId: s.nodeId, d: s.d, relaxes: [], startIndex: i, endIndex: i };
-            } else {
-                if (currentGroup) {
-                    currentGroup.relaxes.push(s);
-                    currentGroup.endIndex = i;
-                }
-            }
-        }
-        if (currentGroup) groupedSteps.push(currentGroup);
+        const groupedSteps = getGroupedSteps(runState.result.steps);
 
         for (let i = 0; i < groupedSteps.length; i += 6) {
             const pageDiv = document.createElement('div');
             pageDiv.style.pageBreakAfter = 'always';
-            pageDiv.innerHTML = `<h2>Step-by-Step Graphs (${i+1} - ${Math.min(i+6, groupedSteps.length)})</h2>`;
+            
+            const firstGroup = groupedSteps[i];
+            const lastGroup = groupedSteps[Math.min(i + 5, groupedSteps.length - 1)];
+            const startStr = firstGroup.stepIndex + 1;
+            let endStr = lastGroup.stepIndex + 1;
+            if (lastGroup.relaxes && lastGroup.relaxes.length > 0) {
+                endStr += lastGroup.relaxes.length;
+            }
+            pageDiv.innerHTML = `<h2>Step-by-Step Graphs (${startStr} - ${endStr})</h2>`;
             
             const grid = document.createElement('div');
             grid.className = 'step-grid';
             
             for (let j = i; j < Math.min(i + 6, groupedSteps.length); j++) {
                 const group = groupedSteps[j];
-                const img = createStepCanvas(group.endIndex, group);
+                const img = createStepCanvas(group.stepIndex, group, false);
                 
-                let desc = `Step ${group.startIndex+1}-${group.endIndex+1}: Current Node ${labelOf(group.nodeId)} (dist = ${fmtNum(group.d)})`;
-                if (group.relaxes.length > 0) {
+                let desc = '';
+                if (group.type === 'finalize') {
+                    desc = `Step ${group.stepIndex+1}: Current Node ${labelOf(group.nodeId)} (dist = ${fmtNum(group.d)})`;
+                } else {
+                    const endIdx = group.stepIndex + group.relaxes.length;
                     let rStrs = group.relaxes.map(r => `${labelOf(r.nodeId)} (dist = ${fmtNum(r.d)})`);
-                    desc += `<br>Relaxed: ${rStrs.join(', ')}`;
+                    desc = `Step ${group.stepIndex+1}-${endIdx}: Reachable Nodes<br>${rStrs.join(', ')}`;
                 }
 
                 const itemDiv = document.createElement('div');
@@ -2156,7 +2257,7 @@ $('pdfBtn').addEventListener('click', () => {
         }
     }
 
-    // FINAL PAGE: Solution in Paragraphs
+    // FINAL PAGE: Solution in Paragraphs & Final Table
     if (runState && runState.result) {
         const pageFinal = document.createElement('div');
         pageFinal.innerHTML = `
@@ -2164,6 +2265,8 @@ $('pdfBtn').addEventListener('click', () => {
             <div class="paragraph-section">
                 ${paragraphHtml}
             </div>
+            <h2>Final Solution Table</h2>
+            <div>${resHtml}</div>
         `;
         pdfDiv.appendChild(pageFinal);
     }
@@ -2201,19 +2304,19 @@ function updateSys(){
   let stat = 'IDLE', cls = 'st';
   if (rs && !rs.showPath){ stat = 'RUNNING · STEP ' + rs.stepIndex + '/' + rs.steps.length; cls = 'st run'; }
   else if (rs && rs.showPath){
-    if (destId != null && !rs.result.path.length){ stat = 'UNREACHABLE'; cls = 'st err'; }
-    else if (destId != null){ stat = 'DONE · COST ' + fmtNum(rs.result.dist.get(destId)); }
+    if (destIds.size === 1 && !isFinite(rs.result.dist.get([...destIds][0]))){ stat = 'UNREACHABLE'; cls = 'st err'; }
+    else if (destIds.size === 1){ stat = 'DONE · COST ' + fmtNum(rs.result.dist.get([...destIds][0])); }
     else stat = 'DONE · TREE BUILT';
   } else if (marqueeSel.nodes.size || marqueeSel.edges.size){
     stat = 'BOX SEL · ' + marqueeSel.nodes.size + 'N ' + marqueeSel.edges.size + 'E';
   }
-  const key = [nodes.length, edges.length, sourceId, destId, mode, stat, cls, labelOf(sourceId), labelOf(destId), marqueeSel.nodes.size, marqueeSel.edges.size].join('|');
+  const key = [nodes.length, edges.length, sourceId, destIds.size, mode, stat, cls, labelOf(sourceId), marqueeSel.nodes.size, marqueeSel.edges.size].join('|');
   if (key === sysCache) return;
   sysCache = key;
   $('sysNodes').textContent = nodes.length;
   $('sysEdges').textContent = edges.length;
   $('sysSrc').textContent = sourceId != null ? labelOf(sourceId) : '—';
-  $('sysDst').textContent = destId != null ? labelOf(destId) : '—';
+  $('sysDst').textContent = destIds.size === 0 ? 'ALL' : destIds.size === 1 ? labelOf([...destIds][0]) : destIds.size + ' nodes';
   $('sysMode').textContent = mode.toUpperCase();
   $('sysStat').textContent = stat;
   $('sysStatWrap').className = cls;
