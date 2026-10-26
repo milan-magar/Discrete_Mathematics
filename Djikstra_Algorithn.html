@@ -327,6 +327,7 @@ let runState = null;       // animation / playback state
 let pendingConnect = null; // node id awaiting second click
 let dragNode = null;
 let dragOffset = {x:0, y:0};
+let dragGroup = null;      // For moving multiple selected nodes
 let downPos = null;
 let moved = false;
 let mouse = {x:0, y:0};
@@ -1006,6 +1007,7 @@ function resetAll(){
   selEdge = null;
   marqueeStart = null;
   marquee = null;
+  dragGroup = null;
   clearMarqueeSel();
   clearLog();
   renderResults();
@@ -1096,13 +1098,19 @@ function updateInspector(){
       <div class="muted">
         <b>Box selection active</b><br>
         ${mN} node${mN === 1 ? '' : 's'} · ${mE} edge${mE === 1 ? '' : 's'}<br><br>
-        Press <b>Backspace</b> / <b>Delete</b> to remove everything inside the box.<br>
-        Press <b>Esc</b> or click elsewhere to clear the selection.
+        Drag a selected node to <b>move</b> the group.<br>
+        Press <b>Backspace</b> / <b>Delete</b> to delete the selection.
       </div>
       <div class="row" style="margin-top:12px">
+        <button id="btnRotL">↺ -90°</button>
+        <button id="btnRotR">↻ +90°</button>
+      </div>
+      <div class="row">
         <button class="danger" id="btnDelBox">Delete Selection</button>
       </div>
     `;
+    $('btnRotL').addEventListener('click', () => rotateSelection(-90));
+    $('btnRotR').addEventListener('click', () => rotateSelection(90));
     $('btnDelBox').addEventListener('click', deleteSelection);
     return;
   }
@@ -1154,6 +1162,7 @@ function deleteNode(id){
   if (selNode === id)  selNode = null;
   if (pendingConnect === id) pendingConnect = null;
   if (dragNode && dragNode.id === id) dragNode = null;
+  if (dragGroup) dragGroup.nodes = dragGroup.nodes.filter(x => x.ref.id !== id);
   marqueeSel.nodes.delete(id);
   invalidate();
   updateInspector();
@@ -1198,6 +1207,7 @@ function deleteSelection(){
   if (selEdge != null && eIds.has(selEdge))   selEdge = null;
   if (pendingConnect != null && nIds.has(pendingConnect)) pendingConnect = null;
   if (dragNode && nIds.has(dragNode.id))      dragNode = null;
+  dragGroup = null;
 
   marqueeStart = null;
   marquee = null;
@@ -1236,6 +1246,31 @@ async function createEdgeWithPrompt(aId, bId){
 
   invalidate();
   log(`＋ Edge ${labelOf(aId)} ${directedMode ? '→' : '↔'} ${labelOf(bId)} (w=${fmtNum(w)})`, 'muted');
+}
+
+/* --- rotate selected nodes ---------------------------------- */
+function rotateSelection(angleDeg){
+  const nIds = Array.from(marqueeSel.nodes);
+  if (!nIds.length) return;
+  
+  let cx = 0, cy = 0;
+  for (const id of nIds) {
+    const n = byId(id);
+    cx += n.x; cy += n.y;
+  }
+  cx /= nIds.length; cy /= nIds.length;
+  
+  const rad = angleDeg * Math.PI / 180;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  
+  for (const id of nIds) {
+    const n = byId(id);
+    const dx = n.x - cx, dy = n.y - cy;
+    n.x = cx + dx * cos - dy * sin;
+    n.y = cy + dx * sin + dy * cos;
+  }
+  
+  invalidate();
 }
 
 /* ============================================================
@@ -1291,9 +1326,18 @@ function onDown(ev){
     if (n){
       selNode = n.id;
       selEdge = null;
-      clearMarqueeSel();
-      dragNode = n;
-      dragOffset = { x: p.x - n.x, y: p.y - n.y };
+      if (marqueeSel.nodes.has(n.id)) {
+        // Start group drag
+        dragGroup = { startX: p.x, startY: p.y, nodes: [] };
+        for (const id of marqueeSel.nodes) {
+          const node = byId(id);
+          dragGroup.nodes.push({ ref: node, initX: node.x, initY: node.y });
+        }
+      } else {
+        clearMarqueeSel();
+        dragNode = n;
+        dragOffset = { x: p.x - n.x, y: p.y - n.y };
+      }
       updateInspector();
     } else if (e){
       selEdge = e.id;
@@ -1343,6 +1387,16 @@ function onMove(ev){
 
   if (downPos && Math.hypot(p.x - downPos.x, p.y - downPos.y) > 5) moved = true;
 
+  if (dragGroup){
+    const dx = p.x - dragGroup.startX;
+    const dy = p.y - dragGroup.startY;
+    for (const item of dragGroup.nodes) {
+      item.ref.x = Math.max(R, Math.min(canvas.clientWidth - R, item.initX + dx));
+      item.ref.y = Math.max(R, Math.min(canvas.clientHeight - R, item.initY + dy));
+    }
+    return;
+  }
+
   if (dragNode){
     dragNode.x = Math.max(R, Math.min(canvas.clientWidth  - R, p.x - dragOffset.x));
     dragNode.y = Math.max(R, Math.min(canvas.clientHeight - R, p.y - dragOffset.y));
@@ -1368,7 +1422,9 @@ function updateCursor(n, e){
   else if (mode === 'erase') canvas.style.cursor = (n || e) ? 'pointer' : 'crosshair';
   else if (mode === 'connect') canvas.style.cursor = n ? 'pointer' : 'crosshair';
   else if (mode === 'source' || mode === 'dest') canvas.style.cursor = n ? 'pointer' : 'crosshair';
+  else if (dragGroup)        canvas.style.cursor = 'grabbing';
   else if (dragNode)         canvas.style.cursor = 'grabbing';
+  else if (n && marqueeSel.nodes.has(n.id)) canvas.style.cursor = 'grab';
   else if (n)                canvas.style.cursor = 'grab';
   else if (e)                canvas.style.cursor = 'pointer';
   else                       canvas.style.cursor = 'crosshair';
@@ -1380,7 +1436,11 @@ function onUp(ev){
   const p = getPos(ev);
   const hadMarquee = !!marquee;
 
-  if (dragNode){
+  if (dragGroup){
+    dragGroup = null;
+    canvas.style.cursor = 'crosshair';
+  }
+  else if (dragNode){
     dragNode = null;
     canvas.style.cursor = 'crosshair';
   }
@@ -1423,6 +1483,7 @@ window.addEventListener('keydown', ev => {
     pendingConnect = null;
     marqueeStart = null;
     marquee = null;
+    dragGroup = null;
     clearMarqueeSel();
     if (!typing){ selNode = null; selEdge = null; updateInspector(); }
     else updateInspector();
@@ -1525,6 +1586,7 @@ function loadPreset(key){
   selEdge = null;
   pendingConnect = null;
   dragNode = null;
+  dragGroup = null;
   runState = null;
   marqueeStart = null;
   marquee = null;
@@ -1584,6 +1646,7 @@ document.querySelectorAll('.tool').forEach(btn => {
     pendingConnect = null;
     marqueeStart = null;
     marquee = null;
+    dragGroup = null;
     clearMarqueeSel();
     hintEl.textContent = HINTS[mode] || '';
     updateInspector();
@@ -1623,72 +1686,244 @@ $('clearBtn').addEventListener('click', () => {
   log('Graph cleared.', 'muted');
 });
 
-// PDF export
+/* ============================================================
+   PDF EXPORT
+   ============================================================ */
+function createExportCanvas() {
+  const pad = 80;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of nodes) {
+    minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y);
+  }
+  if (nodes.length === 0) return null;
+  
+  const w = maxX - minX + pad * 2;
+  const h = maxY - minY + pad * 2;
+  
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ex = c.getContext('2d');
+  
+  ex.fillStyle = '#ffffff';
+  ex.fillRect(0, 0, w, h);
+  
+  ex.translate(pad - minX, pad - minY);
+  
+  // Draw edges
+  const rs = runState;
+  for (const e of edges) {
+    const a = byId(e.a), b = byId(e.b);
+    if (!a || !b) continue;
+    
+    const onPath = !!(rs && rs.showPath && rs.pathEdgeIds.has(e.id));
+    const onTree = !!(rs && rs.showPath && rs.treeEdgeIds.has(e.id));
+    
+    ex.beginPath();
+    ex.moveTo(a.x, a.y);
+    ex.lineTo(b.x, b.y);
+    
+    if (onPath) { ex.strokeStyle = '#1d4ed8'; ex.lineWidth = 5; }
+    else if (onTree) { ex.strokeStyle = '#93c5fd'; ex.lineWidth = 4; }
+    else { ex.strokeStyle = '#9ca3af'; ex.lineWidth = 2.5; }
+    ex.stroke();
+    
+    // Arrow head
+    if (e.directed) {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const size = 12;
+      const tipX = b.x - ux * (R + 1);
+      const tipY = b.y - uy * (R + 1);
+      const bx = tipX - ux * size, by = tipY - uy * size;
+      const px = -uy * size * 0.55, py = ux * size * 0.55;
+      
+      ex.beginPath();
+      ex.moveTo(tipX, tipY);
+      ex.lineTo(bx + px, by + py);
+      ex.lineTo(bx - px, by - py);
+      ex.closePath();
+      ex.fillStyle = onPath ? '#1d4ed8' : (onTree ? '#93c5fd' : '#9ca3af');
+      ex.fill();
+    }
+    
+    // Weight
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const txt = fmtNum(e.w);
+    ex.font = 'bold 14px Helvetica, Arial, sans-serif';
+    const tw = ex.measureText(txt).width;
+    ex.fillStyle = '#ffffff';
+    ex.fillRect(mx - tw/2 - 6, my - 10, tw + 12, 20);
+    ex.fillStyle = '#374151';
+    ex.textAlign = 'center'; ex.textBaseline = 'middle';
+    ex.fillText(txt, mx, my);
+  }
+  
+  // Draw nodes
+  for (const n of nodes) {
+    const isSource = n.id === sourceId;
+    const isDest = n.id === destId;
+    const onPath = !!(rs && rs.showPath && rs.pathNodes.has(n.id));
+    const isFinal = !!(rs && rs.finalized.has(n.id));
+    
+    ex.beginPath();
+    ex.arc(n.x, n.y, R, 0, Math.PI * 2);
+    ex.fillStyle = '#ffffff';
+    ex.fill();
+    
+    if (isSource) ex.strokeStyle = '#16a34a';
+    else if (isDest) ex.strokeStyle = '#dc2626';
+    else if (onPath) ex.strokeStyle = '#2563eb';
+    else if (isFinal) ex.strokeStyle = '#d97706';
+    else ex.strokeStyle = '#4b5563';
+    
+    ex.lineWidth = 4;
+    ex.stroke();
+    
+    ex.fillStyle = '#111827';
+    ex.font = 'bold 20px Helvetica, Arial, sans-serif';
+    ex.textAlign = 'center'; ex.textBaseline = 'middle';
+    ex.fillText(n.label, n.x, n.y + 1);
+    
+    if (rs) {
+      const d = rs.dist.get(n.id);
+      if (d !== undefined && isFinite(d)) {
+        ex.font = 'bold 14px Helvetica, Arial, sans-serif';
+        ex.fillStyle = '#4b5563';
+        ex.fillText('d=' + fmtNum(d), n.x, n.y + R + 16);
+      }
+    }
+  }
+  
+  return c.toDataURL('image/png');
+}
+
 $('pdfBtn').addEventListener('click', () => {
-  // Temporarily clear selection for a clean export
-  const _selNode = selNode;
-  const _selEdge = selEdge;
-  const _marquee = marquee;
-  const _marqueeSel = marqueeSel;
+  const imgData = createExportCanvas();
+  if (!imgData) {
+    log('⚠ Graph is empty. Nothing to export.', 'err');
+    return;
+  }
   
-  selNode = null;
-  selEdge = null;
-  marquee = null;
-  marqueeSel = { nodes: new Set(), edges: new Set() };
-  
-  draw(performance.now());
-  
-  const imgData = canvas.toDataURL('image/png');
+  const srcLabel = sourceId ? labelOf(sourceId) : 'N/A';
+  const dstLabel = destId ? labelOf(destId) : 'N/A';
+  const title = destId 
+    ? `Dijkstra Algorithm to find shortest path from Source ${srcLabel} and Destination ${dstLabel}`
+    : `Dijkstra Algorithm to find shortest path from Source ${srcLabel}`;
+
   const resHtml = resultsBody.innerHTML;
   const logHtml = logEl.innerHTML;
-  
-  // Restore
-  selNode = _selNode;
-  selEdge = _selEdge;
-  marquee = _marquee;
-  marqueeSel = _marqueeSel;
-  draw(performance.now());
   
   const printWindow = window.open('', '_blank');
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Dijkstra Visualizer - Export</title>
+      <title>Dijkstra Report</title>
       <style>
-        body { font-family: 'Courier New', Courier, monospace; color: #333; background: #fff; padding: 20px; }
-        h1 { font-size: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; margin-top: 0; }
-        h2 { font-size: 16px; margin-top: 30px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
-        .img-container { text-align: center; margin: 20px 0; background: #0a0904; padding: 10px; border-radius: 4px; }
-        img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background: #f4f4f4; }
-        td:first-child { font-weight: bold; }
-        td.costcell { color: #007700 !important; font-weight: bold; }
-        td.pathcell { color: #b35c00 !important; }
-        .log { font-size: 12px; line-height: 1.5; white-space: pre-wrap; background: #f9f9f9; padding: 15px; border: 1px solid #ddd; }
-        .log-line { display: block; margin-bottom: 2px; }
-        .log-line.ok { color: #007700; font-weight: bold; }
+        @page { size: A4; margin: 10mm; }
+        body { 
+          font-family: Georgia, 'Times New Roman', Times, serif; 
+          color: #111; 
+          background: #fff; 
+          margin: 0; 
+          padding: 0; 
+        }
+        .page-border {
+          border: 3px solid #222;
+          padding: 30px;
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+        }
+        h1 { 
+          font-size: 24px; 
+          text-align: center;
+          margin-top: 0;
+          margin-bottom: 30px; 
+          border-bottom: 2px solid #333; 
+          padding-bottom: 10px; 
+          font-family: Helvetica, Arial, sans-serif;
+        }
+        h2 { 
+          font-size: 18px; 
+          margin-top: 30px; 
+          border-bottom: 1px solid #ccc; 
+          padding-bottom: 5px; 
+          font-family: Helvetica, Arial, sans-serif;
+        }
+        .img-container { 
+          text-align: center; 
+          margin: 30px 0; 
+        }
+        img { 
+          max-width: 100%; 
+          height: auto; 
+          display: block; 
+          margin: 0 auto; 
+          border: 1px solid #eee;
+          box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        table { 
+          width: 100%; 
+          border-collapse: collapse; 
+          font-size: 14px; 
+          margin-top: 10px; 
+          font-family: Helvetica, Arial, sans-serif;
+        }
+        th, td { 
+          border: 1px solid #ccc; 
+          padding: 10px; 
+          text-align: left; 
+        }
+        th { 
+          background: #f4f4f4; 
+          font-weight: bold;
+        }
+        td:first-child { 
+          font-weight: bold; 
+        }
+        td.costcell { 
+          color: #007700 !important; 
+          font-weight: bold; 
+        }
+        td.pathcell { 
+          color: #b35c00 !important; 
+        }
+        .log { 
+          font-family: 'Courier New', Courier, monospace; 
+          font-size: 13px; 
+          line-height: 1.5; 
+          white-space: pre-wrap; 
+          background: #fafafa; 
+          padding: 15px; 
+          border: 1px solid #ccc; 
+        }
+        .log-line { display: block; margin-bottom: 4px; }
+        .log-line.ok { color: #007700; }
         .log-line.relax { color: #b35c00; }
         .log-line.path { color: #000; font-weight: bold; }
         .log-line.err { color: #cc0000; font-weight: bold; }
-        .log-line.muted { color: #666; }
+        .log-line.muted { color: #555; }
+        .no-data { color: #666; font-style: italic; }
       </style>
     </head>
     <body>
-      <h1>Dijkstra / Path Lab</h1>
-      
-      <h2>Graph</h2>
-      <div class="img-container">
-        <img src="${imgData}" />
+      <div class="page-border">
+        <h1>${title}</h1>
+        
+        <h2>Graph</h2>
+        <div class="img-container">
+          <img src="${imgData}" />
+        </div>
+        
+        <h2>Solution</h2>
+        <div>${resHtml || '<p class="no-data">No solution computed. Run the algorithm first.</p>'}</div>
+        
+        <h2>Algorithm Log</h2>
+        <div class="log">${logHtml || '<p class="no-data">No log available.</p>'}</div>
       </div>
-      
-      <h2>Solution</h2>
-      <div>${resHtml || '<p style="color:#666">No solution computed.</p>'}</div>
-      
-      <h2>Algorithm Log</h2>
-      <div class="log">${logHtml || '<p style="color:#666">No log available.</p>'}</div>
       
       <script>
         window.onload = function() {
