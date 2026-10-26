@@ -1,0 +1,1637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dijkstra / Path Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0904; --panel:#161208; --panel2:#1d170b; --ink:#ffb84a; --dim:#7a5f30; --paper:#f3e6c4;
+  --body:#bda874; --green:#52ff8a; --red:#ff5252;
+  --line:rgba(255,184,74,.18); --line2:rgba(255,184,74,.32);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;line-height:1.5;background:var(--bg);color:var(--ink);overflow:hidden;-webkit-font-smoothing:antialiased}
+::selection{background:var(--ink);color:var(--bg)}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh;position:relative}
+
+/* CRT overlays */
+.scan{position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(180deg,rgba(255,184,74,0) 0,rgba(255,184,74,0) 2px,rgba(255,184,74,.04) 2px,rgba(255,184,74,.04) 3px);mix-blend-mode:overlay}
+.grain{position:fixed;inset:0;pointer-events:none;z-index:9998;opacity:.08;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+.vignette{position:fixed;inset:0;pointer-events:none;z-index:9997;background:radial-gradient(ellipse at 50% 50%,transparent 45%,rgba(0,0,0,.45))}
+@keyframes blink{50%{opacity:.3}}
+
+/* ---------- Top bar ---------- */
+.topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;background:rgba(10,9,4,.96);border-bottom:1px solid var(--line2);position:relative;z-index:10;font-size:12px;letter-spacing:.04em}
+.brand{font-weight:700;font-size:15px;letter-spacing:.06em;display:flex;align-items:center;gap:9px;margin-right:10px;white-space:nowrap;color:var(--ink);text-transform:uppercase}
+.brand::before{content:"";width:9px;height:9px;background:var(--green);box-shadow:0 0 12px var(--green);animation:blink 1.4s infinite}
+.brand span{color:var(--dim);font-weight:400}
+.tools{display:flex;gap:2px;flex-wrap:wrap}
+.spacer{flex:1}
+.clock{color:var(--dim);font-size:11px;white-space:nowrap;margin-left:6px}
+.clock b{color:var(--ink);font-weight:500}
+
+button{font-family:inherit;font-size:12px;font-weight:500;letter-spacing:.05em;color:var(--dim);background:none;border:1px solid transparent;padding:7px 10px;border-radius:0;cursor:pointer;transition:color .15s,background .15s,border-color .15s,box-shadow .2s;white-space:nowrap}
+button:hover{color:var(--ink)}
+button:active{transform:translateY(1px)}
+.tool::before{content:"["}.tool::after{content:"]"}
+.tool.active,button.active{color:var(--bg);background:var(--ink);box-shadow:0 0 18px rgba(255,184,74,.35)}
+button.primary{border-color:var(--ink);color:var(--ink);text-transform:uppercase;padding:8px 16px}
+button.primary::before{content:"$ ";color:var(--green)}
+button.primary:hover{background:var(--ink);color:var(--bg);box-shadow:0 0 24px rgba(255,184,74,.4)}
+button.primary:hover::before{color:var(--bg)}
+button.ghost{border-color:var(--line2);color:var(--body)}
+button.ghost:hover{border-color:var(--ink);color:var(--ink)}
+button.danger{border-color:rgba(255,82,82,.45);color:var(--red)}
+button.danger:hover{background:var(--red);color:var(--bg);border-color:var(--red);box-shadow:0 0 18px rgba(255,82,82,.35)}
+
+.switch{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);user-select:none;cursor:pointer;padding:7px 10px;border:1px solid var(--line);transition:border-color .15s,color .15s;letter-spacing:.05em}
+.switch:hover{border-color:var(--line2);color:var(--ink)}
+.switch input{display:none}
+.switch .track{font-weight:700;color:var(--dim);width:3ch;flex:none}
+.switch .track::before{content:"[ ]"}
+.switch input:checked + .track{color:var(--green)}
+.switch input:checked + .track::before{content:"[x]"}
+
+select{font-family:inherit;font-size:12px;letter-spacing:.04em;color:var(--body);background:var(--bg);border:1px solid var(--line);padding:7px 9px;border-radius:0;cursor:pointer;outline:none}
+select:hover,select:focus{border-color:var(--ink);color:var(--ink)}
+select option{background:var(--panel);color:var(--ink)}
+
+/* status strip */
+.sys{display:flex;gap:18px;flex-wrap:wrap;justify-content:space-between;padding:6px 18px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--line);background:rgba(10,9,4,.96);position:relative;z-index:9}
+.sys b{color:var(--green);font-weight:500}
+.sys .st b{color:var(--ink)}
+.sys .st.run b{color:var(--ink);animation:blink 1s infinite}
+.sys .st.err b{color:var(--red)}
+
+/* ---------- Layout ---------- */
+.main{display:flex;flex:1;min-height:0}
+.sidebar{width:356px;flex:none;display:flex;flex-direction:column;overflow-y:auto;background:var(--bg);border-right:1px solid var(--line2)}
+.panel{padding:18px 18px 20px;border-bottom:1px solid var(--line)}
+.panel h3{margin:0 0 14px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);font-weight:500;display:flex;align-items:center;gap:10px}
+.panel h3::before{content:"╋";color:var(--ink)}
+.panel h3 em{font-family:'Instrument Serif',serif;font-style:italic;text-transform:none;letter-spacing:0;font-size:20px;color:var(--paper);font-weight:400;margin-left:auto}
+.muted{color:var(--body);font-size:12px;line-height:1.75}
+.muted b{color:var(--ink);font-weight:500}
+.meta{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line);font-size:10.5px;color:var(--dim);letter-spacing:.04em}
+
+.field{margin-bottom:12px}
+.field label{display:block;font-size:10px;color:var(--dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.14em}
+.field input{width:100%;padding:9px 11px;border-radius:0;border:1px solid var(--line2);background:var(--panel);color:var(--paper);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+.field input:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(255,184,74,.12)}
+.row{display:flex;gap:8px;margin-bottom:8px}
+.row button{flex:1;border-color:var(--line2);color:var(--body)}
+.row button:hover{border-color:var(--ink);color:var(--ink)}
+.row button.active{color:var(--bg);border-color:var(--ink)}
+.row button.danger{border-color:rgba(255,82,82,.45);color:var(--red)}
+.row button.danger:hover{color:var(--bg)}
+.check{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--body);cursor:pointer;user-select:none}
+.check input{accent-color:#ffb84a;width:14px;height:14px;cursor:pointer}
+
+/* ---------- Results ---------- */
+#resultsBody{max-height:240px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+th{text-align:left;color:var(--dim);font-weight:500;padding:6px 6px;border-bottom:1px solid var(--line2);font-size:9.5px;text-transform:uppercase;letter-spacing:.14em;position:sticky;top:0;background:var(--bg)}
+td{padding:7px 6px;border-bottom:1px dashed var(--line);color:var(--body);vertical-align:top}
+td:first-child{font-family:'Instrument Serif',serif;font-style:italic;font-size:17px;color:var(--paper);line-height:1}
+td.costcell{color:var(--green)}
+td.pathcell{color:var(--ink);word-break:break-all;font-size:10.5px;line-height:1.55}
+tr:hover td{background:rgba(255,184,74,.05)}
+
+/* ---------- Log (terminal window) ---------- */
+.term{background:var(--panel);border:1px solid rgba(255,184,74,.3);border-radius:6px;overflow:hidden;box-shadow:0 0 40px rgba(255,184,74,.05)}
+.term-head{display:flex;gap:6px;align-items:center;padding:8px 12px;background:rgba(255,184,74,.06);border-bottom:1px solid var(--line);font-size:10.5px;color:var(--dim);letter-spacing:.05em}
+.term-head .dots{display:flex;gap:5px;margin-right:10px}
+.term-head .dots i{width:8px;height:8px;border-radius:50%}
+.term-head .dots i:nth-child(1){background:var(--red)}
+.term-head .dots i:nth-child(2){background:var(--ink)}
+.term-head .dots i:nth-child(3){background:var(--green)}
+.log{height:220px;overflow-y:auto;font-size:11.5px;line-height:1.7;padding:10px 12px;color:#dbc080}
+.log:empty::before{content:"$ _";color:var(--dim)}
+.log-line{padding:1px 0}
+.log-line.ok{color:var(--green)}
+.log-line.relax{color:var(--ink)}
+.log-line.path{color:var(--paper);font-weight:600;text-shadow:0 0 8px rgba(243,230,196,.35)}
+.log-line.err{color:var(--red)}
+.log-line.muted{color:var(--dim);font-size:11.5px;line-height:1.7}
+
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#3a2e18}
+::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+
+/* ---------- Canvas ---------- */
+.canvas-wrap{flex:1;position:relative;min-width:0;background:var(--bg);user-select:none;-webkit-user-select:none}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+.hint{position:absolute;left:16px;bottom:16px;font-size:11.5px;color:var(--body);background:rgba(10,9,4,.88);border:1px solid var(--line);padding:8px 12px;pointer-events:none;max-width:calc(100% - 32px);letter-spacing:.02em}
+.hint::before{content:"// ";color:var(--dim)}
+.legend{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:8px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--body);background:rgba(10,9,4,.88);border:1px solid var(--line2);padding:12px 14px;pointer-events:none}
+.legend .lt{font-size:10px;color:var(--dim);letter-spacing:.18em;padding-bottom:8px;margin-bottom:2px;border-bottom:1px dashed var(--line)}
+.legend .dot{width:8px;height:8px;display:inline-block;margin-right:9px;vertical-align:middle;box-shadow:0 0 8px currentColor}
+
+/* ---------- Modal ---------- */
+.modal{position:fixed;inset:0;background:rgba(5,4,2,.78);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal.hidden{display:none}
+.modal-box{background:var(--panel);border:1px solid rgba(255,184,74,.4);border-radius:6px;width:340px;box-shadow:0 0 60px rgba(255,184,74,.1),0 24px 70px rgba(0,0,0,.7);animation:pop .16s ease-out;overflow:hidden}
+.modal-box .term-head{margin:0}
+.modal-inner{padding:18px}
+@keyframes pop{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-box h3{margin:0 0 14px;font-family:'Instrument Serif',serif;font-weight:400;font-size:26px;line-height:1.05;color:var(--paper);letter-spacing:-.01em}
+.modal-box input{width:100%;padding:11px 12px;border-radius:0;border:1px solid var(--line2);background:var(--bg);color:var(--ink);font-size:16px;font-family:inherit;outline:none}
+.modal-box input:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(255,184,74,.14)}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+
+@media (max-width:1100px){.clock{display:none}}
+@media (max-width:900px){.sidebar{width:280px}.brand{font-size:13px}.sys .opt{display:none}}
+</style>
+</head>
+<body>
+
+<div class="scan"></div>
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">Dijkstra <span>/ path lab</span></div>
+
+    <div class="tools">
+      <button class="tool active" data-mode="select">select</button>
+      <button class="tool" data-mode="connect">connect</button>
+      <button class="tool" data-mode="source">source</button>
+      <button class="tool" data-mode="dest">dest</button>
+      <button class="tool" data-mode="erase">erase</button>
+    </div>
+
+    <label class="switch" title="When enabled, newly created edges are one-way">
+      <input type="checkbox" id="dirToggle"><span class="track"></span> directed
+    </label>
+
+    <select id="presetSel">
+      <option value="">load preset…</option>
+      <option value="simple">simple a–b–c</option>
+      <option value="mesh">complex mesh</option>
+      <option value="directed">directed network</option>
+    </select>
+
+    <div class="spacer"></div>
+
+    <button id="runBtn" class="primary">run --dijkstra</button>
+    <button id="resetBtn" class="ghost">reset</button>
+    <button id="clearBtn" class="danger">clear graph</button>
+    <div class="clock">SYS · <b id="clock">--:--:--</b></div>
+  </header>
+
+  <div class="sys">
+    <span>NODES: <b id="sysNodes">0</b></span>
+    <span>EDGES: <b id="sysEdges">0</b></span>
+    <span>SRC: <b id="sysSrc">—</b></span>
+    <span>DST: <b id="sysDst">—</b></span>
+    <span class="opt">MODE: <b id="sysMode">SELECT</b></span>
+    <span class="st" id="sysStatWrap">STATUS: <b id="sysStat">IDLE</b></span>
+  </div>
+
+  <div class="main">
+    <aside class="sidebar">
+      <div class="panel">
+        <h3>Inspector</h3>
+        <div id="inspectorBody"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Results</h3>
+        <div id="resultsBody">
+          <div class="muted">Run the algorithm to see shortest-path results.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="term">
+          <div class="term-head"><div class="dots"><i></i><i></i><i></i></div> ~/dijkstra — algorithm.log</div>
+          <div id="log" class="log"></div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="canvas-wrap">
+      <canvas id="canvas"></canvas>
+
+      <div class="legend">
+        <div class="lt">╋ Legend</div>
+        <div><span class="dot" style="background:#52ff8a;color:#52ff8a"></span>Source</div>
+        <div><span class="dot" style="background:#ff5252;color:#ff5252"></span>Destination</div>
+        <div><span class="dot" style="background:#ffb84a;color:#ffb84a"></span>Finalized</div>
+        <div><span class="dot" style="background:#f3e6c4;color:#f3e6c4"></span>Shortest path</div>
+        <div><span class="dot" style="background:#5a4522;color:#5a4522"></span>Unvisited</div>
+      </div>
+
+      <div class="hint" id="hint">Click empty space to add a node · drag nodes to move · click to select</div>
+    </div>
+  </div>
+</div>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="term-head"><div class="dots"><i></i><i></i><i></i></div> edge --weight</div>
+    <div class="modal-inner">
+      <h3 id="modalTitle">Edge weight</h3>
+      <input id="modalInput" type="number" step="any" min="0" value="1">
+      <div class="modal-actions">
+        <button id="modalCancel" class="ghost">cancel</button>
+        <button id="modalOk" class="primary">ok</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   DOM REFERENCES
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const canvas       = $('canvas');
+const ctx          = canvas.getContext('2d');
+const wrap         = document.querySelector('.canvas-wrap');
+const logEl        = $('log');
+const resultsBody  = $('resultsBody');
+const inspectorBody= $('inspectorBody');
+const hintEl       = $('hint');
+const modal        = $('modal');
+const modalTitle   = $('modalTitle');
+const modalInput   = $('modalInput');
+const modalOk      = $('modalOk');
+const modalCancel  = $('modalCancel');
+
+/* ============================================================
+   CONSTANTS / HELPERS
+   ============================================================ */
+const R = 22;                       // node radius in CSS px
+const NODE_FONT  = 'italic 400 23px "Instrument Serif", serif';
+const MONO_FONT  = '600 11px "JetBrains Mono", monospace';
+
+const HINTS = {
+  select : 'Click empty space to add a node · drag nodes to move · drag on empty space to box-select · Backspace deletes the box contents',
+  connect: 'Click the first node, then the second, to create an edge',
+  source : 'Click a node to make it the source',
+  dest   : 'Click a node to set the destination (click it again to clear)',
+  erase  : 'Click a node or an edge to delete it'
+};
+
+const esc = s => String(s).replace(/[&<>"']/g, c => (
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+));
+
+const fmtNum = v => {
+  if (!isFinite(v)) return '∞';
+  return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
+};
+
+function roundRect(x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x,     y + h, r);
+  ctx.arcTo(x,     y + h, x,     y,     r);
+  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.closePath();
+}
+
+/* ============================================================
+   STATE
+   ============================================================ */
+let nodes = [];            // {id, label, x, y}
+let edges = [];            // {id, a, b, w, directed}
+let nodeSeq = 1;
+let edgeSeq = 1;
+
+let mode         = 'select';
+let directedMode = false;
+
+let sourceId = null;
+let destId   = null;
+
+let selNode = null;        // node id
+let selEdge = null;        // edge id
+
+let runState = null;       // animation / playback state
+let pendingConnect = null; // node id awaiting second click
+let dragNode = null;
+let dragOffset = {x:0, y:0};
+let downPos = null;
+let moved = false;
+let mouse = {x:0, y:0};
+let hover = {node:null, edge:null};
+
+/* --- NEW: box / marquee selection ---------------------------- */
+let marqueeStart = null;   // {x,y} origin of a box drag
+let marquee      = null;   // active rect {x1,y1,x2,y2}
+let marqueeSel   = { nodes: new Set(), edges: new Set() };
+
+let dpr = 1;
+let gridPattern = null;
+
+/* ============================================================
+   LOOKUP HELPERS
+   ============================================================ */
+const byId    = id => nodes.find(n => n.id === id);
+const labelOf = id => { const n = byId(id); return n ? n.label : '?'; };
+
+function nextLabel(){
+  const used = new Set(nodes.map(n => n.label));
+  for (let i = 0; i < 2000; i++){
+    const s = i < 26
+      ? String.fromCharCode(65 + i)
+      : String.fromCharCode(65 + (i % 26)) + Math.floor(i / 26);
+    if (!used.has(s)) return s;
+  }
+  return 'X' + nodeSeq;
+}
+
+/* ============================================================
+   LOGGING
+   ============================================================ */
+function log(text, cls){
+  const d = document.createElement('div');
+  d.className = 'log-line' + (cls ? ' ' + cls : '');
+  d.textContent = text;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+  while (logEl.children.length > 500) logEl.removeChild(logEl.firstChild);
+}
+function clearLog(){ logEl.innerHTML = ''; }
+
+/* ============================================================
+   CANVAS SETUP
+   ============================================================ */
+function buildGridPattern(){
+  const c = document.createElement('canvas');
+  c.width = c.height = 28;
+  const g = c.getContext('2d');
+  g.fillStyle = '#0a0904';
+  g.fillRect(0, 0, 28, 28);
+  g.fillStyle = 'rgba(255,184,74,0.14)';
+  g.beginPath(); g.arc(14, 14, 1.2, 0, Math.PI * 2); g.fill();
+  gridPattern = ctx.createPattern(c, 'repeat');
+}
+
+function resize(){
+  const r = wrap.getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1;
+  canvas.width  = Math.max(1, Math.round(r.width  * dpr));
+  canvas.height = Math.max(1, Math.round(r.height * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+buildGridPattern();
+new ResizeObserver(resize).observe(wrap);
+window.addEventListener('resize', resize);
+
+/* ============================================================
+   GEOMETRY
+   ============================================================ */
+function getPos(ev){
+  const r = canvas.getBoundingClientRect();
+  return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+}
+
+function nodeAt(p){
+  for (let i = nodes.length - 1; i >= 0; i--){
+    const n = nodes[i];
+    if (Math.hypot(p.x - n.x, p.y - n.y) <= R + 5) return n;
+  }
+  return null;
+}
+
+function distToSegment(p, a, b){
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const l2 = dx * dx + dy * dy;
+  if (l2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+function edgeAt(p){
+  for (let i = edges.length - 1; i >= 0; i--){
+    const e = edges[i];
+    const a = byId(e.a), b = byId(e.b);
+    if (!a || !b) continue;
+    if (distToSegment(p, a, b) < 8) return e;
+  }
+  return null;
+}
+
+/* --- NEW: marquee geometry ---------------------------------- */
+function rectFromPoints(a, b){
+  return {
+    x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y),
+    x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y)
+  };
+}
+function pointInRect(p, r){
+  return p.x >= r.x1 && p.x <= r.x2 && p.y >= r.y1 && p.y <= r.y2;
+}
+function nodeInRect(n, r){
+  return pointInRect({ x: n.x, y: n.y }, r);
+}
+function computeMarqueeSelection(r){
+  const selN = new Set(), selE = new Set();
+  for (const n of nodes) if (nodeInRect(n, r)) selN.add(n.id);
+  for (const e of edges){
+    const a = byId(e.a), b = byId(e.b);
+    if (!a || !b) continue;
+    if (selN.has(a.id) && selN.has(b.id)){ selE.add(e.id); continue; }
+    if (pointInRect({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, r)) selE.add(e.id);
+  }
+  return { nodes: selN, edges: selE };
+}
+
+/* ============================================================
+   RENDERING
+   ============================================================ */
+function drawEdge(e, now){
+  const a = byId(e.a), b = byId(e.b);
+  if (!a || !b) return;
+
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+
+  const extra = e.directed ? 5 : 0;
+  const x1 = a.x + ux * (R + 1),          y1 = a.y + uy * (R + 1);
+  const x2 = b.x - ux * (R + 1 + extra),  y2 = b.y - uy * (R + 1 + extra);
+
+  const rs = runState;
+  const onPath = !!(rs && rs.showPath && rs.pathEdgeIds.has(e.id));
+  const onTree = !!(rs && rs.showPath && rs.treeEdgeIds.has(e.id));
+  const flash  = !!(rs && rs.flashEdgeId === e.id && now < (rs.flashUntil || 0));
+  const sel    = selEdge === e.id;
+  const hov    = hover.edge === e.id;
+  const marq   = marqueeSel.edges.has(e.id);
+
+  let color = '#4a3a1c', lw = 2;
+  if (onTree)             { color = 'rgba(243,230,196,0.42)'; lw = 3.5; }
+  if (onPath)             { color = '#f3e6c4';             lw = 5;   }
+  if (flash)              { color = '#fff4d6';             lw = 4;   }
+  if (hov && !onPath)     { color = '#a07a3a';                       }
+  if (sel)                { color = '#ffd27a';             lw = 4;   }
+  if (marq && !onPath)    { color = '#ffd27a';             lw = Math.max(lw, 3.5); }
+
+  // main line
+  ctx.save();
+  ctx.lineCap = 'round';
+  if (onPath || marq){ ctx.shadowColor = onPath ? 'rgba(243,230,196,.8)' : 'rgba(255,184,74,.55)'; ctx.shadowBlur = 14; }
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.stroke();
+  ctx.restore();
+
+  // animated flowing dashes on the final path
+  if (onPath){
+    ctx.save();
+    ctx.setLineDash([9, 13]);
+    ctx.lineDashOffset = -((now / 18) % 22);
+    ctx.strokeStyle = 'rgba(10,9,4,.85)';
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // arrow head for directed edges
+  if (e.directed){
+    const size = 9;
+    const tipX = b.x - ux * (R + 1);
+    const tipY = b.y - uy * (R + 1);
+    const bx = tipX - ux * size, by = tipY - uy * size;
+    const px = -uy * size * 0.55, py = ux * size * 0.55;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(bx + px, by + py);
+    ctx.lineTo(bx - px, by - py);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // weight pill
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  const label = fmtNum(e.w);
+  ctx.save();
+  ctx.font = MONO_FONT;
+  const tw = ctx.measureText(label).width;
+  const pw = tw + 14, ph = 19;
+  ctx.fillStyle   = onPath ? 'rgba(46,38,20,.97)' : 'rgba(10,9,4,.95)';
+  ctx.strokeStyle = onPath ? '#f3e6c4' : (sel || marq ? '#ffd27a' : '#4a3a1c');
+  ctx.lineWidth = 1.2;
+  roundRect(mx - pw / 2, my - ph / 2, pw, ph, 6);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = onPath ? '#f3e6c4' : '#c79a52';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, mx, my + 0.5);
+  ctx.restore();
+}
+
+function drawNode(n, now){
+  const rs = runState;
+  const onPath  = !!(rs && rs.showPath && rs.pathNodes.has(n.id));
+  const isFinal = !!(rs && rs.finalized.has(n.id));
+  const isSource = n.id === sourceId;
+  const isDest   = n.id === destId;
+  const isSel    = selNode === n.id;
+  const isHover  = hover.node === n.id;
+  const isMarq   = marqueeSel.nodes.has(n.id);
+
+  let fill = '#161208', stroke = '#5a4522', txt = '#dbc080';
+  if (isFinal)  { fill = '#2e2008'; stroke = '#ffb84a'; txt = '#ffd9a0'; }
+  if (onPath)   { fill = '#3a3220'; stroke = '#f3e6c4'; txt = '#fffaf0'; }
+  if (isSource) { fill = '#0c2a16'; stroke = '#52ff8a'; txt = '#c8ffd9'; }
+  if (isDest)   { fill = '#2e0c0c'; stroke = '#ff5252'; txt = '#ffc9c9'; }
+  if (isHover && !isSel && !isSource && !isDest) stroke = '#c79a52';
+
+  const glow = isSource ? 'rgba(82,255,138,.7)'
+             : isDest   ? 'rgba(255,82,82,.75)'
+             : onPath   ? 'rgba(243,230,196,.8)'
+             : isFinal  ? 'rgba(255,184,74,.5)'
+             : null;
+
+  ctx.save();
+  if (glow){ ctx.shadowColor = glow; ctx.shadowBlur = 20; }
+  ctx.beginPath();
+  ctx.arc(n.x, n.y, R, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = stroke;
+  ctx.stroke();
+  ctx.restore();
+
+  // selection ring
+  if (isSel){
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.lineDashOffset = -((now / 40) % 8);
+    ctx.strokeStyle = '#ffd27a';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, R + 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // marquee selection ring
+  if (isMarq){
+    ctx.save();
+    ctx.strokeStyle = '#ffd27a';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = 'rgba(255,184,74,.65)';
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, R + 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // source ring
+  if (isSource){
+    ctx.save();
+    ctx.strokeStyle = 'rgba(82,255,138,.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, R + 7, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // destination ring (dashed)
+  if (isDest){
+    ctx.save();
+    ctx.setLineDash([5, 5]);
+    ctx.lineDashOffset = -((now / 50) % 10);
+    ctx.strokeStyle = 'rgba(255,82,82,.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, R + 7, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // pending connect ring
+  if (pendingConnect === n.id){
+    ctx.save();
+    ctx.strokeStyle = '#ffb84a';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, R + 11, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // label
+  ctx.save();
+  ctx.fillStyle = txt;
+  ctx.font = NODE_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(n.label, n.x, n.y + 0.5);
+  ctx.restore();
+
+  // tentative / final distance
+  if (rs){
+    const d = rs.dist.get(n.id);
+    if (d !== undefined && isFinite(d)){
+      ctx.save();
+      ctx.font = '500 11px "JetBrains Mono", monospace';
+      ctx.fillStyle = onPath ? '#7dd3fc' : (isFinal ? '#ffb84a' : '#7a5f30');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('d=' + fmtNum(d), n.x, n.y + R + 13);
+      ctx.restore();
+    }
+  }
+}
+
+/* --- NEW: the rubber-band box ------------------------------- */
+function drawMarquee(r, now){
+  const x = r.x1, y = r.y1, w = r.x2 - r.x1, h = r.y2 - r.y1;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,184,74,0.07)';
+  ctx.fillRect(x, y, w, h);
+  ctx.setLineDash([7, 5]);
+  ctx.lineDashOffset = -((now / 40) % 12);
+  ctx.strokeStyle = '#ffb84a';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+  ctx.restore();
+
+  // corner ticks
+  ctx.save();
+  ctx.strokeStyle = '#ffd27a';
+  ctx.lineWidth = 2;
+  const t = 8;
+  ctx.beginPath();
+  ctx.moveTo(x, y + t); ctx.lineTo(x, y); ctx.lineTo(x + t, y);
+  ctx.moveTo(x + w - t, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + t);
+  ctx.moveTo(x + w, y + h - t); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - t, y + h);
+  ctx.moveTo(x + t, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - t);
+  ctx.stroke();
+  ctx.restore();
+
+  const live = computeMarqueeSelection(r);
+  if (!live.nodes.size && !live.edges.size) return;
+
+  const nN = live.nodes.size, nE = live.edges.size;
+  const txt = `${nN} node${nN === 1 ? '' : 's'} · ${nE} edge${nE === 1 ? '' : 's'}  [⌫ delete]`;
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+
+  ctx.save();
+  ctx.font = '500 11px "JetBrains Mono", monospace';
+  const tw = ctx.measureText(txt).width;
+  const bw = tw + 18, bh = 20;
+
+  let bx = x + w - bw;
+  let by = y + h + 8;
+  if (by + bh > ch - 10) by = y - bh - 8;
+  bx = Math.max(10, Math.min(cw - bw - 10, bx));
+  by = Math.max(10, by);
+
+  ctx.fillStyle = 'rgba(10,9,4,.94)';
+  ctx.strokeStyle = 'rgba(255,184,74,.6)';
+  ctx.lineWidth = 1;
+  roundRect(bx, by, bw, bh, 4);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffb84a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(txt, bx + bw / 2, by + bh / 2 + 0.5);
+  ctx.restore();
+}
+
+function draw(now){
+  const w = canvas.width / dpr;
+  const h = canvas.height / dpr;
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  // background grid
+  ctx.fillStyle = gridPattern;
+  ctx.fillRect(0, 0, w, h);
+
+  // edges: normal first, highlighted on top
+  const highlighted = [];
+  for (const e of edges){
+    const rs = runState;
+    const hot = (rs && rs.showPath &&
+      (rs.pathEdgeIds.has(e.id) || rs.treeEdgeIds.has(e.id)))
+      || marqueeSel.edges.has(e.id);
+    if (hot) highlighted.push(e);
+    else drawEdge(e, now);
+  }
+  for (const e of highlighted) drawEdge(e, now);
+
+  // pending connection rubber-band
+  if (pendingConnect != null){
+    const a = byId(pendingConnect);
+    if (a){
+      ctx.save();
+      ctx.setLineDash([6, 6]);
+      ctx.lineDashOffset = -((now / 25) % 12);
+      ctx.strokeStyle = 'rgba(255,184,74,.7)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(mouse.x, mouse.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // nodes
+  for (const n of nodes) drawNode(n, now);
+
+  // marquee box on top of everything
+  if (marquee) drawMarquee(marquee, now);
+}
+
+/* ============================================================
+   DIJKSTRA
+   ============================================================ */
+function computeDijkstra(){
+  if (sourceId == null) return null;
+
+  const dist = new Map();
+  const prev = new Map();       // nodeId -> {from, edgeId}
+  const visited = new Set();
+  const steps = [];
+
+  for (const n of nodes) dist.set(n.id, Infinity);
+  dist.set(sourceId, 0);
+
+  const pq = [{ id: sourceId, d: 0 }];
+
+  while (pq.length){
+    // extract-min (small graphs => linear scan is fine)
+    let bi = 0;
+    for (let i = 1; i < pq.length; i++) if (pq[i].d < pq[bi].d) bi = i;
+    const cur = pq.splice(bi, 1)[0];
+
+    if (visited.has(cur.id)) continue;
+    if (cur.d > dist.get(cur.id)) continue;
+    visited.add(cur.id);
+
+    steps.push({ type:'finalize', nodeId: cur.id, d: cur.d });
+
+    if (destId != null && cur.id === destId) break;
+
+    for (const e of edges){
+      let nb = null;
+      if (e.a === cur.id) nb = e.b;
+      else if (!e.directed && e.b === cur.id) nb = e.a;
+      if (nb === null) continue;
+      if (visited.has(nb)) continue;
+
+      const nd  = cur.d + e.w;
+      const old = dist.get(nb);
+      if (nd < old){
+        dist.set(nb, nd);
+        prev.set(nb, { from: cur.id, edgeId: e.id });
+        pq.push({ id: nb, d: nd });
+        steps.push({
+          type:'relax', nodeId: nb, fromId: cur.id,
+          edgeId: e.id, d: nd, old
+        });
+      }
+    }
+  }
+
+  /* ----- reconstruct the destination path ----- */
+  let path = [], pathEdges = [];
+  if (destId != null && isFinite(dist.get(destId))){
+    let cur = destId;
+    const guard = new Set();
+    while (cur != null && !guard.has(cur)){
+      guard.add(cur);
+      path.unshift(cur);
+      const p = prev.get(cur);
+      if (p){ pathEdges.unshift(p.edgeId); cur = p.from; }
+      else cur = null;
+    }
+    if (path[0] !== sourceId){ path = []; pathEdges = []; }
+  }
+
+  /* ----- shortest-path tree (all prev edges) ----- */
+  const treeEdges = [];
+  for (const v of prev.values()) treeEdges.push(v.edgeId);
+
+  return { dist, prev, steps, path, pathEdges, treeEdges };
+}
+
+/* ============================================================
+   RUN / PLAYBACK
+   ============================================================ */
+function startRun(){
+  if (sourceId == null){
+    log('⚠ Select a source node first (use the Source tool).', 'err');
+    return;
+  }
+
+  const res = computeDijkstra();
+  if (!res) return;
+
+  clearLog();
+  log(`▶ Running Dijkstra from ${labelOf(sourceId)}` +
+      (destId != null ? ` → ${labelOf(destId)}` : ' to all nodes'), 'muted');
+
+  const interval = Math.max(45, Math.min(220, 2600 / Math.max(1, res.steps.length)));
+
+  runState = {
+    result: res,
+    steps: res.steps,
+    stepIndex: 0,
+    nextStepTime: performance.now() + 260,
+    interval,
+    finalized: new Set(),
+    dist: new Map([[sourceId, 0]]),
+    showPath: false,
+    pathNodes: new Set(),
+    pathEdgeIds: new Set(),
+    treeEdgeIds: new Set(),
+    flashEdgeId: null,
+    flashUntil: 0
+  };
+
+  resultsBody.innerHTML = '<div class="muted">Computing…</div>';
+}
+
+function applyStep(s){
+  const rs = runState;
+  if (!rs) return;
+
+  if (s.type === 'finalize'){
+    rs.finalized.add(s.nodeId);
+    rs.dist.set(s.nodeId, s.d);
+    log(`✓ Finalize ${labelOf(s.nodeId)}  ·  dist = ${fmtNum(s.d)}`, 'ok');
+  } else {
+    rs.dist.set(s.nodeId, s.d);
+    rs.flashEdgeId = s.edgeId;
+    rs.flashUntil  = performance.now() + 340;
+    const oldTxt = s.old === Infinity ? '∞' : fmtNum(s.old);
+    log(`↻ Relax ${labelOf(s.fromId)} → ${labelOf(s.nodeId)}  ·  ${oldTxt} → ${fmtNum(s.d)}`, 'relax');
+  }
+}
+
+function finishRun(now){
+  const rs  = runState;
+  const res = rs.result;
+  rs.showPath = true;
+
+  if (destId != null){
+    if (res.path.length){
+      res.path.forEach(id => rs.pathNodes.add(id));
+      res.pathEdges.forEach(id => rs.pathEdgeIds.add(id));
+      log(`★ Path: ${res.path.map(labelOf).join(' → ')}`, 'path');
+      log(`★ Total cost: ${fmtNum(res.dist.get(destId))}`, 'path');
+    } else {
+      log(`✗ ${labelOf(sourceId)} cannot reach ${labelOf(destId)}`, 'err');
+    }
+  } else {
+    res.treeEdges.forEach(id => rs.treeEdgeIds.add(id));
+    log(`★ Shortest-path tree from ${labelOf(sourceId)} computed`, 'path');
+  }
+
+  renderResults();
+}
+
+function tickRun(now){
+  const rs = runState;
+  if (!rs) return;
+
+  if (rs.stepIndex < rs.steps.length){
+    let guard = 0;
+    while (rs.stepIndex < rs.steps.length && now >= rs.nextStepTime && guard++ < 400){
+      applyStep(rs.steps[rs.stepIndex++]);
+      rs.nextStepTime += rs.interval;
+    }
+  } else if (!rs.showPath){
+    finishRun(now);
+  }
+}
+
+/* ============================================================
+   RESULTS TABLE
+   ============================================================ */
+function buildPathLabels(target, prev, src){
+  const out = [];
+  let cur = target, guard = 0;
+  while (cur != null && guard++ < 500){
+    out.unshift(labelOf(cur));
+    if (cur === src) break;
+    const p = prev.get(cur);
+    cur = p ? p.from : null;
+  }
+  return out;
+}
+
+function renderResults(){
+  if (!runState){
+    resultsBody.innerHTML = '<div class="muted">Run the algorithm to see shortest-path results.</div>';
+    return;
+  }
+  const res = runState.result;
+  const sorted = nodes.slice().sort((a, b) => a.label.localeCompare(b.label, undefined, {numeric:true}));
+
+  let rows = '';
+  let count = 0;
+  for (const n of sorted){
+    const d = res.dist.get(n.id);
+    if (d === undefined || !isFinite(d)) continue;
+    count++;
+    const p = buildPathLabels(n.id, res.prev, sourceId);
+    rows += `<tr>
+      <td>${esc(n.label)}</td>
+      <td class="costcell">${fmtNum(d)}</td>
+      <td class="pathcell">${p.map(esc).join('→')}</td>
+    </tr>`;
+  }
+
+  if (!count){
+    resultsBody.innerHTML = '<div class="muted">No reachable nodes from the source.</div>';
+    return;
+  }
+
+  resultsBody.innerHTML = `
+    <table>
+      <thead><tr><th>Node</th><th>Cost</th><th>Path</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ============================================================
+   INVALIDATION
+   ============================================================ */
+function invalidate(){
+  runState = null;
+  renderResults();
+}
+
+function resetAll(){
+  runState = null;
+  pendingConnect = null;
+  selNode = null;
+  selEdge = null;
+  marqueeStart = null;
+  marquee = null;
+  clearMarqueeSel();
+  clearLog();
+  renderResults();
+  updateInspector();
+}
+
+/* ============================================================
+   INSPECTOR
+   ============================================================ */
+function updateInspector(){
+  if (selNode != null){
+    const n = byId(selNode);
+    if (!n){ selNode = null; return updateInspector(); }
+
+    const deg = edges.filter(e => e.a === n.id || e.b === n.id).length;
+
+    inspectorBody.innerHTML = `
+      <div class="field">
+        <label>Node Label</label>
+        <input id="inpLabel" maxlength="10" value="${esc(n.label)}">
+      </div>
+      <div class="row">
+        <button id="btnSrc" class="${n.id === sourceId ? 'active' : ''}">Set as Source</button>
+        <button id="btnDst" class="${n.id === destId ? 'active' : ''}">Set as Dest</button>
+      </div>
+      <div class="row">
+        <button class="danger" id="btnDelNode">Delete Node</button>
+      </div>
+      <div class="meta">id ${n.id} · ${deg} edge${deg === 1 ? '' : 's'} · (${Math.round(n.x)}, ${Math.round(n.y)})</div>
+    `;
+
+    const inp = $('inpLabel');
+    inp.addEventListener('input', () => { n.label = inp.value; });
+    inp.addEventListener('change', () => {
+      if (!n.label.trim()) n.label = '?';
+      updateInspector();
+    });
+    $('btnSrc').addEventListener('click', () => setSource(n.id));
+    $('btnDst').addEventListener('click', () => setDest(n.id));
+    $('btnDelNode').addEventListener('click', () => deleteNode(n.id));
+    return;
+  }
+
+  if (selEdge != null){
+    const e = edges.find(x => x.id === selEdge);
+    if (!e){ selEdge = null; return updateInspector(); }
+
+    inspectorBody.innerHTML = `
+      <div class="field">
+        <label>Edge Weight</label>
+        <input id="inpWeight" type="number" step="any" min="0" value="${e.w}">
+      </div>
+      <label class="check">
+        <input type="checkbox" id="inpDir" ${e.directed ? 'checked' : ''}> Directed (one-way)
+      </label>
+      <div class="row" style="margin-top:12px">
+        <button class="danger" id="btnDelEdge">Delete Edge</button>
+      </div>
+      <div class="meta">${esc(labelOf(e.a))} ${e.directed ? '→' : '↔'} ${esc(labelOf(e.b))}</div>
+    `;
+
+    $('inpWeight').addEventListener('input', ev => {
+      const v = parseFloat(ev.target.value);
+      e.w = isNaN(v) ? 0 : Math.max(0, v);
+      invalidate();
+    });
+    $('inpDir').addEventListener('change', ev => {
+      e.directed = ev.target.checked;
+      invalidate();
+    });
+    $('btnDelEdge').addEventListener('click', () => deleteEdge(e.id));
+    return;
+  }
+
+  // box selection summary in the inspector
+  const mN = marqueeSel.nodes.size, mE = marqueeSel.edges.size;
+  if (mN || mE){
+    inspectorBody.innerHTML = `
+      <div class="muted">
+        <b>Box selection active</b><br>
+        ${mN} node${mN === 1 ? '' : 's'} · ${mE} edge${mE === 1 ? '' : 's'}<br><br>
+        Press <b>Backspace</b> / <b>Delete</b> to remove everything inside the box.<br>
+        Press <b>Esc</b> or click elsewhere to clear the selection.
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="danger" id="btnDelBox">Delete Selection</button>
+      </div>
+    `;
+    $('btnDelBox').addEventListener('click', deleteSelection);
+    return;
+  }
+
+  inspectorBody.innerHTML = `
+    <div class="muted">
+      Nothing selected.<br><br>
+      • Click a node or edge to inspect it.<br>
+      • Click empty canvas to add a node.<br>
+      • Drag on empty canvas to box-select.<br>
+      • Use <b>Connect</b> mode to link two nodes.<br>
+      • Enable <b>Directed</b> for one-way edges.
+    </div>`;
+}
+
+/* ============================================================
+   GRAPH MUTATIONS
+   ============================================================ */
+function setSource(id){
+  sourceId = id;
+  if (destId === id) destId = null;
+  invalidate();
+  updateInspector();
+  log(`▶ Source set to ${labelOf(id)}`, 'ok');
+}
+
+function setDest(id){
+  destId = (destId === id) ? null : id;
+  invalidate();
+  updateInspector();
+  log(destId != null ? `◎ Destination set to ${labelOf(id)}` : '◎ Destination cleared', 'ok');
+}
+
+function addNodeAt(p){
+  const n = { id: nodeSeq++, label: nextLabel(), x: p.x, y: p.y };
+  nodes.push(n);
+  selNode = n.id;
+  selEdge = null;
+  invalidate();
+  updateInspector();
+}
+
+function deleteNode(id){
+  const lbl = labelOf(id);
+  nodes = nodes.filter(n => n.id !== id);
+  edges = edges.filter(e => e.a !== id && e.b !== id);
+  if (sourceId === id) sourceId = null;
+  if (destId === id)   destId = null;
+  if (selNode === id)  selNode = null;
+  if (pendingConnect === id) pendingConnect = null;
+  if (dragNode && dragNode.id === id) dragNode = null;
+  marqueeSel.nodes.delete(id);
+  invalidate();
+  updateInspector();
+  log(`× Deleted node ${lbl}`, 'muted');
+}
+
+function deleteEdge(id){
+  const e = edges.find(x => x.id === id);
+  if (!e) return;
+  const txt = `${labelOf(e.a)} ${e.directed ? '→' : '↔'} ${labelOf(e.b)}`;
+  edges = edges.filter(x => x.id !== id);
+  if (selEdge === id) selEdge = null;
+  marqueeSel.edges.delete(id);
+  invalidate();
+  updateInspector();
+  log(`× Deleted edge ${txt}`, 'muted');
+}
+
+/* --- NEW: clear the box selection ---------------------------- */
+function clearMarqueeSel(){
+  if (marqueeSel.nodes.size || marqueeSel.edges.size){
+    marqueeSel = { nodes: new Set(), edges: new Set() };
+  }
+}
+
+/* --- NEW: delete everything inside the box ------------------- */
+function deleteSelection(){
+  const nIds = marqueeSel.nodes;
+  const eIds = marqueeSel.edges;
+  if (!nIds.size && !eIds.size) return;
+
+  const removedNodes = nIds.size;
+  const edgesBefore  = edges.length;
+
+  edges = edges.filter(e => !eIds.has(e.id) && !nIds.has(e.a) && !nIds.has(e.b));
+  const removedEdges = edgesBefore - edges.length;
+  nodes = nodes.filter(n => !nIds.has(n.id));
+
+  if (sourceId != null && nIds.has(sourceId)) sourceId = null;
+  if (destId != null && nIds.has(destId))     destId = null;
+  if (selNode != null && nIds.has(selNode))   selNode = null;
+  if (selEdge != null && eIds.has(selEdge))   selEdge = null;
+  if (pendingConnect != null && nIds.has(pendingConnect)) pendingConnect = null;
+  if (dragNode && nIds.has(dragNode.id))      dragNode = null;
+
+  marqueeStart = null;
+  marquee = null;
+  marqueeSel = { nodes: new Set(), edges: new Set() };
+
+  invalidate();
+  updateInspector();
+  log(`× Box-deleted ${removedNodes} node${removedNodes === 1 ? '' : 's'} · ${removedEdges} edge${removedEdges === 1 ? '' : 's'}`, 'muted');
+}
+
+async function createEdgeWithPrompt(aId, bId){
+  if (aId === bId) return;
+
+  const duplicate = edges.some(e =>
+    (e.a === aId && e.b === bId) ||
+    (e.a === bId && e.b === aId)
+  );
+  if (duplicate){
+    log('⚠ An edge between those nodes already exists.', 'err');
+    return;
+  }
+
+  const w = await askWeight(
+    `Weight for ${labelOf(aId)} ${directedMode ? '→' : '↔'} ${labelOf(bId)}`,
+    1
+  );
+  if (w === null) return;
+
+  edges.push({
+    id: edgeSeq++,
+    a: aId,
+    b: bId,
+    w: Math.max(0, isNaN(w) ? 0 : w),
+    directed: directedMode
+  });
+
+  invalidate();
+  log(`＋ Edge ${labelOf(aId)} ${directedMode ? '→' : '↔'} ${labelOf(bId)} (w=${fmtNum(w)})`, 'muted');
+}
+
+/* ============================================================
+   MODAL (weight prompt)
+   ============================================================ */
+function askWeight(title, defaultValue){
+  return new Promise(resolve => {
+    modalTitle.textContent = title;
+    modalInput.value = (defaultValue === undefined ? 1 : defaultValue);
+    modal.classList.remove('hidden');
+    setTimeout(() => { modalInput.focus(); modalInput.select(); }, 20);
+
+    function cleanup(){
+      modal.classList.add('hidden');
+      modalOk.removeEventListener('click', onOk);
+      modalCancel.removeEventListener('click', onCancel);
+      modalInput.removeEventListener('keydown', onKey);
+    }
+    function onOk(){
+      const v = parseFloat(modalInput.value);
+      cleanup();
+      resolve(isNaN(v) ? 0 : Math.max(0, v));
+    }
+    function onCancel(){ cleanup(); resolve(null); }
+    function onKey(ev){
+      if (ev.key === 'Enter')  { ev.preventDefault(); onOk(); }
+      if (ev.key === 'Escape') { ev.preventDefault(); onCancel(); }
+    }
+
+    modalOk.addEventListener('click', onOk);
+    modalCancel.addEventListener('click', onCancel);
+    modalInput.addEventListener('keydown', onKey);
+  });
+}
+
+/* ============================================================
+   POINTER INTERACTION
+   ============================================================ */
+function onDown(ev){
+  if (ev.button !== undefined && ev.button !== 0) return;
+
+  const p = getPos(ev);
+  downPos = p;
+  moved = false;
+  mouse = p;
+
+  try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
+
+  const n = nodeAt(p);
+  const e = n ? null : edgeAt(p);
+
+  if (mode === 'select'){
+    if (n){
+      selNode = n.id;
+      selEdge = null;
+      clearMarqueeSel();
+      dragNode = n;
+      dragOffset = { x: p.x - n.x, y: p.y - n.y };
+      updateInspector();
+    } else if (e){
+      selEdge = e.id;
+      selNode = null;
+      clearMarqueeSel();
+      updateInspector();
+    } else {
+      // empty space → prepare a box drag
+      selNode = null;
+      selEdge = null;
+      clearMarqueeSel();
+      marqueeStart = { x: p.x, y: p.y };
+      marquee = null;
+      updateInspector();
+    }
+  }
+  else if (mode === 'connect'){
+    if (n){
+      if (pendingConnect == null){
+        pendingConnect = n.id;
+      } else if (pendingConnect === n.id){
+        pendingConnect = null;
+      } else {
+        const a = pendingConnect, b = n.id;
+        pendingConnect = null;
+        createEdgeWithPrompt(a, b);
+      }
+    } else {
+      pendingConnect = null;
+    }
+  }
+  else if (mode === 'source'){
+    if (n) setSource(n.id);
+  }
+  else if (mode === 'dest'){
+    if (n) setDest(n.id);
+  }
+  else if (mode === 'erase'){
+    if (n) deleteNode(n.id);
+    else if (e) deleteEdge(e.id);
+  }
+}
+
+function onMove(ev){
+  const p = getPos(ev);
+  mouse = p;
+
+  if (downPos && Math.hypot(p.x - downPos.x, p.y - downPos.y) > 5) moved = true;
+
+  if (dragNode){
+    dragNode.x = Math.max(R, Math.min(canvas.clientWidth  - R, p.x - dragOffset.x));
+    dragNode.y = Math.max(R, Math.min(canvas.clientHeight - R, p.y - dragOffset.y));
+    return;
+  }
+
+  // grow the selection box
+  if (marqueeStart && moved){
+    marquee = rectFromPoints(marqueeStart, p);
+    canvas.style.cursor = 'crosshair';
+  }
+
+  const n = nodeAt(p);
+  const e = n ? null : edgeAt(p);
+  hover.node = n ? n.id : null;
+  hover.edge = e ? e.id : null;
+
+  updateCursor(n, e);
+}
+
+function updateCursor(n, e){
+  if (marquee)               canvas.style.cursor = 'crosshair';
+  else if (mode === 'erase') canvas.style.cursor = (n || e) ? 'pointer' : 'crosshair';
+  else if (mode === 'connect') canvas.style.cursor = n ? 'pointer' : 'crosshair';
+  else if (mode === 'source' || mode === 'dest') canvas.style.cursor = n ? 'pointer' : 'crosshair';
+  else if (dragNode)         canvas.style.cursor = 'grabbing';
+  else if (n)                canvas.style.cursor = 'grab';
+  else if (e)                canvas.style.cursor = 'pointer';
+  else                       canvas.style.cursor = 'crosshair';
+}
+
+function onUp(ev){
+  const p = getPos(ev);
+  const hadMarquee = !!marquee;
+
+  if (dragNode){
+    dragNode = null;
+    canvas.style.cursor = 'crosshair';
+  }
+  else if (hadMarquee){
+    // finalise the box selection
+    marqueeSel = computeMarqueeSelection(marquee);
+    const mN = marqueeSel.nodes.size, mE = marqueeSel.edges.size;
+    if (mN || mE){
+      log(`▣ Box selected ${mN} node${mN === 1 ? '' : 's'} · ${mE} edge${mE === 1 ? '' : 's'} — Backspace to delete`, 'muted');
+      updateInspector();
+    } else {
+      updateInspector();
+    }
+  }
+  else if (mode === 'select' && !moved){
+    const n = nodeAt(p);
+    const e = n ? null : edgeAt(p);
+    if (!n && !e) addNodeAt(p);
+  }
+
+  marqueeStart = null;
+  marquee = null;
+  downPos = null;
+  moved = false;
+}
+
+canvas.addEventListener('pointerdown', onDown);
+canvas.addEventListener('pointermove', onMove);
+window.addEventListener('pointerup', onUp);
+canvas.addEventListener('pointerleave', () => { hover.node = null; hover.edge = null; });
+
+canvas.addEventListener('contextmenu', ev => ev.preventDefault());
+
+/* ============================================================
+   KEYBOARD
+   ============================================================ */
+window.addEventListener('keydown', ev => {
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+  if (ev.key === 'Escape'){
+    pendingConnect = null;
+    marqueeStart = null;
+    marquee = null;
+    clearMarqueeSel();
+    if (!typing){ selNode = null; selEdge = null; updateInspector(); }
+    else updateInspector();
+  }
+
+  if ((ev.key === 'Delete' || ev.key === 'Backspace') && !typing){
+    // priority: delete everything captured by the selection box
+    if (marqueeSel.nodes.size || marqueeSel.edges.size){
+      ev.preventDefault();
+      deleteSelection();
+    } else if (selNode != null){
+      deleteNode(selNode);
+    } else if (selEdge != null){
+      deleteEdge(selEdge);
+    }
+  }
+});
+
+/* ============================================================
+   PRESETS
+   ============================================================ */
+const PRESETS = {
+  simple: {
+    name: 'Simple A–B–C',
+    nodes: [
+      ['A', 140, 260],
+      ['B', 360, 130],
+      ['C', 600, 260],
+      ['D', 360, 390]
+    ],
+    edges: [
+      ['A', 'B', 4],
+      ['B', 'C', 3],
+      ['A', 'D', 2],
+      ['D', 'C', 5],
+      ['B', 'D', 1]
+    ]
+  },
+  mesh: {
+    name: 'Complex Mesh',
+    nodes: [
+      ['A', 100, 110], ['B', 300,  80], ['C', 520, 110], ['D', 730,  90],
+      ['E', 140, 275], ['F', 340, 250], ['G', 560, 285], ['H', 750, 265],
+      ['I', 220, 425], ['J', 470, 435], ['K', 680, 415]
+    ],
+    edges: [
+      ['A', 'B',  4], ['A', 'E',  8], ['B', 'C',  8], ['B', 'F', 11],
+      ['C', 'D',  7], ['C', 'G',  4], ['C', 'F',  2], ['D', 'H',  9],
+      ['E', 'F',  7], ['E', 'I',  4], ['F', 'G',  6], ['F', 'I',  2],
+      ['G', 'H', 14], ['G', 'J', 10], ['H', 'K',  6], ['I', 'J',  9],
+      ['J', 'K',  2], ['B', 'E',  3]
+    ]
+  },
+  directed: {
+    name: 'Directed Network',
+    nodes: [
+      ['A', 120, 120], ['B', 390, 100], ['C', 660, 150],
+      ['D', 160, 350], ['E', 430, 330], ['F', 700, 380]
+    ],
+    edges: [
+      ['A', 'B', 5, true], ['A', 'D', 2, true], ['B', 'C', 3, true],
+      ['B', 'E', 6, true], ['D', 'E', 4, true], ['E', 'C', 2, true],
+      ['E', 'F', 7, true], ['C', 'F', 1, true]
+    ]
+  }
+};
+
+function loadPreset(key){
+  const p = PRESETS[key];
+  if (!p) return;
+
+  nodes = [];
+  edges = [];
+  nodeSeq = 1;
+  edgeSeq = 1;
+  sourceId = null;
+  destId = null;
+  selNode = null;
+  selEdge = null;
+  pendingConnect = null;
+  dragNode = null;
+  runState = null;
+  marqueeStart = null;
+  marquee = null;
+  clearMarqueeSel();
+
+  const w = canvas.clientWidth  || 900;
+  const h = canvas.clientHeight || 560;
+  const offX = Math.max(24, (w - 860) / 2);
+  const offY = Math.max(24, (h - 520) / 2);
+
+  const map = {};
+  for (const [label, x, y] of p.nodes){
+    const n = { id: nodeSeq++, label, x: x + offX, y: y + offY };
+    nodes.push(n);
+    map[label] = n.id;
+  }
+  for (const [a, b, wgt, dir] of p.edges){
+    edges.push({
+      id: edgeSeq++,
+      a: map[a],
+      b: map[b],
+      w: wgt,
+      directed: !!dir
+    });
+  }
+
+  if (nodes.length) sourceId = nodes[0].id;
+
+  clearLog();
+  log(`Loaded preset: ${p.name}`, 'muted');
+  log(`Source: ${labelOf(sourceId)}`, 'ok');
+
+  renderResults();
+  updateInspector();
+}
+
+/* ============================================================
+   UI WIRING
+   ============================================================ */
+// mode buttons
+document.querySelectorAll('.tool').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tool').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+    pendingConnect = null;
+    marqueeStart = null;
+    marquee = null;
+    clearMarqueeSel();
+    hintEl.textContent = HINTS[mode] || '';
+    updateInspector();
+  });
+});
+
+// directed toggle
+$('dirToggle').addEventListener('change', ev => {
+  directedMode = ev.target.checked;
+  log(directedMode
+    ? 'New edges will be directed (one-way)'
+    : 'New edges will be undirected (two-way)', 'muted');
+});
+
+// preset select
+$('presetSel').addEventListener('change', ev => {
+  const v = ev.target.value;
+  ev.target.value = '';
+  if (v) loadPreset(v);
+});
+
+// run / reset / clear
+$('runBtn').addEventListener('click', startRun);
+$('resetBtn').addEventListener('click', () => {
+  resetAll();
+  log('⟲ Reset — graph preserved, results cleared.', 'muted');
+});
+$('clearBtn').addEventListener('click', () => {
+  if (nodes.length && !confirm('Delete all nodes and edges?')) return;
+  nodes = [];
+  edges = [];
+  nodeSeq = 1;
+  edgeSeq = 1;
+  sourceId = null;
+  destId = null;
+  resetAll();
+  log('Graph cleared.', 'muted');
+});
+
+/* ============================================================
+   STATUS STRIP + CLOCK
+   ============================================================ */
+let sysCache = '';
+function updateSys(){
+  const rs = runState;
+  let stat = 'IDLE', cls = 'st';
+  if (rs && !rs.showPath){ stat = 'RUNNING · STEP ' + rs.stepIndex + '/' + rs.steps.length; cls = 'st run'; }
+  else if (rs && rs.showPath){
+    if (destId != null && !rs.result.path.length){ stat = 'UNREACHABLE'; cls = 'st err'; }
+    else if (destId != null){ stat = 'DONE · COST ' + fmtNum(rs.result.dist.get(destId)); }
+    else stat = 'DONE · TREE BUILT';
+  } else if (marqueeSel.nodes.size || marqueeSel.edges.size){
+    stat = 'BOX SEL · ' + marqueeSel.nodes.size + 'N ' + marqueeSel.edges.size + 'E';
+  }
+  const key = [nodes.length, edges.length, sourceId, destId, mode, stat, cls, labelOf(sourceId), labelOf(destId), marqueeSel.nodes.size, marqueeSel.edges.size].join('|');
+  if (key === sysCache) return;
+  sysCache = key;
+  $('sysNodes').textContent = nodes.length;
+  $('sysEdges').textContent = edges.length;
+  $('sysSrc').textContent = sourceId != null ? labelOf(sourceId) : '—';
+  $('sysDst').textContent = destId != null ? labelOf(destId) : '—';
+  $('sysMode').textContent = mode.toUpperCase();
+  $('sysStat').textContent = stat;
+  $('sysStatWrap').className = cls;
+}
+function tickClock(){
+  const d = new Date(), z = n => String(n).padStart(2,'0');
+  const el = $('clock'); if (el) el.textContent = z(d.getUTCHours())+':'+z(d.getUTCMinutes())+':'+z(d.getUTCSeconds())+'Z';
+}
+tickClock(); setInterval(tickClock, 1000);
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+function frame(now){
+  tickRun(now);
+  updateSys();
+  draw(now);
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+resize();
+hintEl.textContent = HINTS[mode];
+updateInspector();
+renderResults();
+loadPreset('simple');
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
