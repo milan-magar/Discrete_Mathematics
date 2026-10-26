@@ -49,11 +49,11 @@ button.ghost:hover{border-color:var(--ink);color:var(--ink)}
 button.danger{border-color:rgba(255,82,82,.45);color:var(--red)}
 button.danger:hover{background:var(--red);color:var(--bg);border-color:var(--red);box-shadow:0 0 18px rgba(255,82,82,.35)}
 
-/* directed toggle — a little longer now */
-.switch{display:inline-flex;align-items:center;gap:10px;font-size:12px;color:var(--dim);user-select:none;cursor:pointer;padding:8px 16px;min-width:128px;border:1px solid var(--line);transition:border-color .15s,color .15s;letter-spacing:.05em}
+/* directed toggle — fixed layout */
+.switch{display:inline-flex;align-items:center;gap:10px;font-size:12px;color:var(--dim);user-select:none;cursor:pointer;padding:8px 16px;min-width:135px;border:1px solid var(--line);transition:border-color .15s,color .15s;letter-spacing:.05em}
 .switch:hover{border-color:var(--line2);color:var(--ink)}
 .switch input{display:none}
-.switch .track{font-weight:700;color:var(--dim);width:3ch;flex:none}
+.switch .track{font-weight:700;color:var(--dim);white-space:nowrap;flex:none}
 .switch .track::before{content:"[ ]"}
 .switch input:checked + .track{color:var(--green)}
 .switch input:checked + .track::before{content:"[x]"}
@@ -127,10 +127,10 @@ tr:hover td{background:rgba(255,184,74,.05)}
 
 /* ---------- Canvas ---------- */
 .canvas-wrap{flex:1;position:relative;min-width:0;background:var(--bg);user-select:none;-webkit-user-select:none}
-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
-.hint{position:absolute;left:16px;bottom:16px;font-size:11.5px;color:var(--body);background:rgba(10,9,4,.88);border:1px solid var(--line);padding:8px 12px;pointer-events:none;max-width:calc(100% - 32px);letter-spacing:.02em}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair;z-index:1}
+.hint{position:absolute;left:16px;bottom:16px;font-size:11.5px;color:var(--body);background:rgba(10,9,4,.88);border:1px solid var(--line);padding:8px 12px;pointer-events:none;max-width:calc(100% - 32px);letter-spacing:.02em;z-index:2}
 .hint::before{content:"// ";color:var(--dim)}
-.legend{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:8px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--body);background:rgba(10,9,4,.88);border:1px solid var(--line2);padding:12px 14px;pointer-events:none}
+.legend{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:8px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--body);background:rgba(10,9,4,.88);border:1px solid var(--line2);padding:12px 14px;pointer-events:none;z-index:2}
 .legend .lt{font-size:10px;color:var(--dim);letter-spacing:.18em;padding-bottom:8px;margin-bottom:2px;border-bottom:1px dashed var(--line)}
 .legend .dot{width:8px;height:8px;display:inline-block;margin-right:9px;vertical-align:middle;box-shadow:0 0 8px currentColor}
 
@@ -177,12 +177,14 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
       <option value="simple">simple a–b–c</option>
       <option value="mesh">complex mesh</option>
       <option value="directed">directed network</option>
+      <option value="textbook">textbook graph</option>
     </select>
 
     <div class="spacer"></div>
 
     <button id="runBtn" class="primary">run --dijkstra</button>
     <button id="resetBtn" class="ghost">reset</button>
+    <button id="pdfBtn" class="ghost">save pdf</button>
     <button id="clearBtn" class="danger">clear graph</button>
     <div class="clock">SYS · <b id="clock">--:--:--</b></div>
   </header>
@@ -348,11 +350,11 @@ function nextLabel(){
   const used = new Set(nodes.map(n => n.label));
   for (let i = 0; i < 2000; i++){
     const s = i < 26
-      ? String.fromCharCode(65 + i)
-      : String.fromCharCode(65 + (i % 26)) + Math.floor(i / 26);
+      ? String.fromCharCode(97 + i) // lowercase to match textbook
+      : String.fromCharCode(97 + (i % 26)) + Math.floor(i / 26);
     if (!used.has(s)) return s;
   }
-  return 'X' + nodeSeq;
+  return 'x' + nodeSeq;
 }
 
 /* ============================================================
@@ -893,13 +895,13 @@ function applyStep(s){
   if (s.type === 'finalize'){
     rs.finalized.add(s.nodeId);
     rs.dist.set(s.nodeId, s.d);
-    log(`✓ Finalize ${labelOf(s.nodeId)}  ·  dist = ${fmtNum(s.d)}`, 'ok');
+    log(`✓ Current Node ${labelOf(s.nodeId)}  ·  dist = ${fmtNum(s.d)}`, 'ok');
   } else {
     rs.dist.set(s.nodeId, s.d);
     rs.flashEdgeId = s.edgeId;
     rs.flashUntil  = performance.now() + 340;
     const oldTxt = s.old === Infinity ? '∞' : fmtNum(s.old);
-    log(`↻ Relax ${labelOf(s.fromId)} → ${labelOf(s.nodeId)}  ·  ${oldTxt} → ${fmtNum(s.d)}`, 'relax');
+    log(`↻ Reachable ${labelOf(s.fromId)} → ${labelOf(s.nodeId)}  ·  ${oldTxt} → ${fmtNum(s.d)}`, 'relax');
   }
 }
 
@@ -1036,8 +1038,6 @@ function updateInspector(){
     `;
 
     const inp = $('inpLabel');
-    // live update while typing — the canvas redraws every frame, so no
-    // re-render of the inspector happens here (which would steal focus)
     inp.addEventListener('input', () => {
       n.label = inp.value;
     });
@@ -1375,11 +1375,6 @@ function updateCursor(n, e){
 }
 
 function onUp(ev){
-  /* IMPORTANT: only finish gestures that actually started on the canvas.
-     Otherwise a click on the sidebar (label / weight inputs) would be
-     treated as a "click on empty canvas" and would both spawn a phantom
-     node and re-render the inspector — stealing focus from the field the
-     user just clicked into. */
   if (!downPos) return;
 
   const p = getPos(ev);
@@ -1434,7 +1429,6 @@ window.addEventListener('keydown', ev => {
   }
 
   if ((ev.key === 'Delete' || ev.key === 'Backspace') && !typing){
-    // priority: delete everything captured by the selection box
     if (marqueeSel.nodes.size || marqueeSel.edges.size){
       ev.preventDefault();
       deleteSelection();
@@ -1492,6 +1486,28 @@ const PRESETS = {
       ['B', 'E', 6, true], ['D', 'E', 4, true], ['E', 'C', 2, true],
       ['E', 'F', 7, true], ['C', 'F', 1, true]
     ]
+  },
+  textbook: {
+    name: 'Textbook Example',
+    nodes: [
+      ['a', 350, 50],
+      ['b', 550, 150],
+      ['c', 250, 150],
+      ['d', 550, 350],
+      ['e', 250, 350],
+      ['z', 400, 450]
+    ],
+    edges: [
+      ['a', 'b', 4],
+      ['a', 'c', 2],
+      ['b', 'c', 1],
+      ['b', 'd', 5],
+      ['c', 'd', 8],
+      ['c', 'e', 10],
+      ['d', 'e', 2],
+      ['d', 'z', 6],
+      ['e', 'z', 3]
+    ]
   }
 };
 
@@ -1516,8 +1532,19 @@ function loadPreset(key){
 
   const w = canvas.clientWidth  || 900;
   const h = canvas.clientHeight || 560;
-  const offX = Math.max(24, (w - 860) / 2);
-  const offY = Math.max(24, (h - 520) / 2);
+
+  // Center the graph dynamically
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [label, x, y] of p.nodes) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+  }
+  const gW = maxX - minX;
+  const gH = maxY - minY;
+  const offX = (w - gW) / 2 - minX;
+  const offY = (h - gH) / 2 - minY;
 
   const map = {};
   for (const [label, x, y] of p.nodes){
@@ -1578,7 +1605,7 @@ $('presetSel').addEventListener('change', ev => {
   if (v) loadPreset(v);
 });
 
-// run / reset / clear
+// run / reset / pdf / clear
 $('runBtn').addEventListener('click', startRun);
 $('resetBtn').addEventListener('click', () => {
   resetAll();
@@ -1594,6 +1621,84 @@ $('clearBtn').addEventListener('click', () => {
   destId = null;
   resetAll();
   log('Graph cleared.', 'muted');
+});
+
+// PDF export
+$('pdfBtn').addEventListener('click', () => {
+  // Temporarily clear selection for a clean export
+  const _selNode = selNode;
+  const _selEdge = selEdge;
+  const _marquee = marquee;
+  const _marqueeSel = marqueeSel;
+  
+  selNode = null;
+  selEdge = null;
+  marquee = null;
+  marqueeSel = { nodes: new Set(), edges: new Set() };
+  
+  draw(performance.now());
+  
+  const imgData = canvas.toDataURL('image/png');
+  const resHtml = resultsBody.innerHTML;
+  const logHtml = logEl.innerHTML;
+  
+  // Restore
+  selNode = _selNode;
+  selEdge = _selEdge;
+  marquee = _marquee;
+  marqueeSel = _marqueeSel;
+  draw(performance.now());
+  
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Dijkstra Visualizer - Export</title>
+      <style>
+        body { font-family: 'Courier New', Courier, monospace; color: #333; background: #fff; padding: 20px; }
+        h1 { font-size: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; margin-top: 0; }
+        h2 { font-size: 16px; margin-top: 30px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        .img-container { text-align: center; margin: 20px 0; background: #0a0904; padding: 10px; border-radius: 4px; }
+        img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background: #f4f4f4; }
+        td:first-child { font-weight: bold; }
+        td.costcell { color: #007700 !important; font-weight: bold; }
+        td.pathcell { color: #b35c00 !important; }
+        .log { font-size: 12px; line-height: 1.5; white-space: pre-wrap; background: #f9f9f9; padding: 15px; border: 1px solid #ddd; }
+        .log-line { display: block; margin-bottom: 2px; }
+        .log-line.ok { color: #007700; font-weight: bold; }
+        .log-line.relax { color: #b35c00; }
+        .log-line.path { color: #000; font-weight: bold; }
+        .log-line.err { color: #cc0000; font-weight: bold; }
+        .log-line.muted { color: #666; }
+      </style>
+    </head>
+    <body>
+      <h1>Dijkstra / Path Lab</h1>
+      
+      <h2>Graph</h2>
+      <div class="img-container">
+        <img src="${imgData}" />
+      </div>
+      
+      <h2>Solution</h2>
+      <div>${resHtml || '<p style="color:#666">No solution computed.</p>'}</div>
+      
+      <h2>Algorithm Log</h2>
+      <div class="log">${logHtml || '<p style="color:#666">No log available.</p>'}</div>
+      
+      <script>
+        window.onload = function() {
+          setTimeout(function() { window.print(); }, 300);
+        }
+      <\/script>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
 });
 
 /* ============================================================
@@ -1645,7 +1750,7 @@ resize();
 hintEl.textContent = HINTS[mode];
 updateInspector();
 renderResults();
-loadPreset('simple');
+loadPreset('textbook');
 requestAnimationFrame(frame);
 
 })();
