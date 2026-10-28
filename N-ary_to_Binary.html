@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>N-ary to Binary Tree Converter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+:root{
+  --bg:#0a0904; --panel:#161208; --panel2:#1d170b; --ink:#ffb84a; --dim:#7a5f30; --paper:#f3e6c4;
+  --body:#bda874; --green:#52ff8a; --red:#ff5252; --blue:#38bdf8; --orange:#f97316;
+  --line:rgba(255,184,74,.18); --line2:rgba(255,184,74,.32);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;line-height:1.5;background:var(--bg);color:var(--ink);overflow:hidden;-webkit-font-smoothing:antialiased}
+::selection{background:var(--ink);color:var(--bg)}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh;position:relative}
+
+.scan{position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(180deg,rgba(255,184,74,0) 0,rgba(255,184,74,0) 2px,rgba(255,184,74,.04) 2px,rgba(255,184,74,.04) 3px);mix-blend-mode:overlay}
+.grain{position:fixed;inset:0;pointer-events:none;z-index:9998;opacity:.08;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+.vignette{position:fixed;inset:0;pointer-events:none;z-index:9997;background:radial-gradient(ellipse at 50% 50%,transparent 45%,rgba(0,0,0,.45))}
+@keyframes blink{50%{opacity:.3}}
+
+.topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;background:rgba(10,9,4,.96);border-bottom:1px solid var(--line2);position:relative;z-index:10;font-size:12px;letter-spacing:.04em}
+.brand{font-weight:700;font-size:15px;letter-spacing:.06em;display:flex;align-items:center;gap:9px;margin-right:10px;white-space:nowrap;color:var(--ink);text-transform:uppercase}
+.brand::before{content:"";width:9px;height:9px;background:var(--green);box-shadow:0 0 12px var(--green);animation:blink 1.4s infinite}
+.brand span{color:var(--dim);font-weight:400}
+.spacer{flex:1}
+.clock{color:var(--dim);font-size:11px;white-space:nowrap;margin-left:6px}
+.clock b{color:var(--ink);font-weight:500}
+
+button{font-family:inherit;font-size:12px;font-weight:500;letter-spacing:.05em;color:var(--dim);background:none;border:1px solid transparent;padding:7px 10px;border-radius:0;cursor:pointer;transition:color .15s,background .15s,border-color .15s,box-shadow .2s;white-space:nowrap}
+button:hover{color:var(--ink)}
+button:active{transform:translateY(1px)}
+button.primary{border-color:var(--ink);color:var(--ink);text-transform:uppercase;padding:8px 16px}
+button.primary::before{content:"$ ";color:var(--green)}
+button.primary:hover{background:var(--ink);color:var(--bg);box-shadow:0 0 24px rgba(255,184,74,.4)}
+button.primary:hover::before{color:var(--bg)}
+button.ghost{border-color:var(--line2);color:var(--body)}
+button.ghost:hover{border-color:var(--ink);color:var(--ink)}
+button.danger{border-color:rgba(255,82,82,.45);color:var(--red)}
+button.danger:hover{background:var(--red);color:var(--bg);border-color:var(--red);box-shadow:0 0 18px rgba(255,82,82,.35)}
+
+select{font-family:inherit;font-size:12px;letter-spacing:.04em;color:var(--body);background:var(--bg);border:1px solid var(--line);padding:7px 9px;border-radius:0;cursor:pointer;outline:none}
+select:hover,select:focus{border-color:var(--ink);color:var(--ink)}
+select option{background:var(--panel);color:var(--ink)}
+
+.sys{display:flex;gap:18px;flex-wrap:wrap;justify-content:space-between;padding:6px 18px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--line);background:rgba(10,9,4,.96);position:relative;z-index:9}
+.sys b{color:var(--green);font-weight:500}
+.sys .st b{color:var(--ink)}
+.sys .st.run b{color:var(--ink);animation:blink 1s infinite}
+.sys .st.err b{color:var(--red)}
+
+.main{display:flex;flex:1;min-height:0}
+.sidebar{width:356px;flex:none;display:flex;flex-direction:column;overflow-y:auto;background:var(--bg);border-right:1px solid var(--line2)}
+.panel{padding:18px 18px 20px;border-bottom:1px solid var(--line)}
+.panel h3{margin:0 0 14px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);font-weight:500;display:flex;align-items:center;gap:10px}
+.panel h3::before{content:"╋";color:var(--ink)}
+.panel h3 em{font-family:'Instrument Serif',serif;font-style:italic;text-transform:none;letter-spacing:0;font-size:20px;color:var(--paper);font-weight:400;margin-left:auto}
+.muted{color:var(--body);font-size:12px;line-height:1.75}
+.muted b{color:var(--ink);font-weight:500}
+.meta{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line);font-size:10.5px;color:var(--dim);letter-spacing:.04em}
+
+.field{margin-bottom:12px}
+.field label{display:block;font-size:10px;color:var(--dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.14em}
+.field input{width:100%;padding:9px 11px;border-radius:0;border:1px solid var(--line2);background:var(--panel);color:var(--paper);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;user-select:text;-webkit-user-select:text}
+.field input:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(255,184,74,.12)}
+.row{display:flex;gap:8px;margin-bottom:8px}
+.row button{flex:1;border-color:var(--line2);color:var(--body)}
+.row button:hover{border-color:var(--ink);color:var(--ink)}
+.row button.active{color:var(--bg);border-color:var(--ink)}
+.row button.danger{border-color:rgba(255,82,82,.45);color:var(--red)}
+.row button.danger:hover{color:var(--bg)}
+
+.term{background:var(--panel);border:1px solid rgba(255,184,74,.3);border-radius:6px;overflow:hidden;box-shadow:0 0 40px rgba(255,184,74,.05)}
+.term-head{display:flex;gap:6px;align-items:center;padding:8px 12px;background:rgba(255,184,74,.06);border-bottom:1px solid var(--line);font-size:10.5px;color:var(--dim);letter-spacing:.05em}
+.term-head .dots{display:flex;gap:5px;margin-right:10px}
+.term-head .dots i{width:8px;height:8px;border-radius:50%}
+.term-head .dots i:nth-child(1){background:var(--red)}
+.term-head .dots i:nth-child(2){background:var(--ink)}
+.term-head .dots i:nth-child(3){background:var(--green)}
+.log{height:220px;overflow-y:auto;font-size:11.5px;line-height:1.7;padding:10px 12px;color:#dbc080}
+.log:empty::before{content:"$ _";color:var(--dim)}
+.log-line{padding:1px 0}
+.log-line.ok{color:var(--green)}
+.log-line.err{color:var(--red)}
+.log-line.muted{color:var(--dim);font-size:11.5px;line-height:1.7}
+
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#3a2e18}
+::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+
+.canvas-wrap{flex:1;position:relative;min-width:0;background:var(--bg);user-select:none;-webkit-user-select:none}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair;z-index:1}
+.hint{position:absolute;left:16px;bottom:16px;font-size:11.5px;color:var(--body);background:rgba(10,9,4,.88);border:1px solid var(--line);padding:8px 12px;pointer-events:none;max-width:calc(100% - 32px);letter-spacing:.02em;z-index:2}
+.hint::before{content:"// ";color:var(--dim)}
+.legend{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:8px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--body);background:rgba(10,9,4,.88);border:1px solid var(--line2);padding:12px 14px;pointer-events:none;z-index:2}
+.legend .lt{font-size:10px;color:var(--dim);letter-spacing:.18em;padding-bottom:8px;margin-bottom:2px;border-bottom:1px dashed var(--line)}
+.legend .dot{width:8px;height:8px;display:inline-block;margin-right:9px;vertical-align:middle;box-shadow:0 0 8px currentColor}
+
+/* PDF Export Styling */
+.pdf-container { font-family: 'Times New Roman', Times, serif; color: #000; background: #fff; padding:15mm; width: 210mm; box-sizing: border-box; font-size: 14px; }
+.pdf-container * { font-family: 'Times New Roman', Times, serif !important; font-size: 14px; }
+.pdf-container h1 { font-size: 24px !important; text-align: center; margin-bottom: 20pt; border-bottom: 2pt solid #000; padding-bottom: 10pt; }
+.pdf-container h2 { font-size: 18px !important; margin-top: 20pt; border-bottom: 1pt solid #000; padding-bottom: 5pt; }
+.pdf-container p { margin-bottom: 12pt; text-align: justify; }
+
+@media (max-width:1100px){.clock{display:none}}
+@media (max-width:900px){.sidebar{width:280px}.brand{font-size:13px}}
+</style>
+</head>
+<body>
+
+<div class="scan"></div>
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<div class="app">
+  <header class="topbar">
+    <button class="ghost" onclick="window.location.href='index.html#semester-02/discrete-mathematics'" style="margin-right: 10px;">↩ back</button>
+    <div class="brand">Tree <span>/ binary converter</span></div>
+
+    <div class="spacer"></div>
+
+    <button id="convertBtn" class="primary">view binary</button>
+    
+    <div style="display:flex; align-items:center; gap:5px;">
+      <select id="presetSel">
+        <option value="">load preset…</option>
+      </select>
+      <button id="savePresetBtn" class="ghost" title="Save current tree as preset" style="padding: 6px 10px;">+ save</button>
+      <button id="deletePresetBtn" class="danger" title="Delete selected custom preset" style="padding: 6px 10px; display:none;">× del</button>
+    </div>
+
+    <button id="pdfBtn" class="ghost">save pdf</button>
+    <button id="clearBtn" class="danger">clear tree</button>
+    <div class="clock">SYS · <b id="clock">--:--:--</b></div>
+  </header>
+
+  <div class="sys">
+    <span>NODES: <b id="sysNodes">0</b></span>
+    <span class="opt">MODE: <b id="sysMode">N-ARY TREE</b></span>
+    <span class="st" id="sysStatWrap">STATUS: <b id="sysStat">IDLE</b></span>
+  </div>
+
+  <div class="main">
+    <aside class="sidebar">
+      <div class="panel">
+        <h3>Inspector</h3>
+        <div id="inspectorBody"></div>
+      </div>
+
+      <div class="panel">
+        <div class="term">
+          <div class="term-head"><div class="dots"><i></i><i></i><i></i></div> ~/tree — converter.log</div>
+          <div id="log" class="log"></div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="canvas-wrap">
+      <canvas id="canvas"></canvas>
+
+      <div class="legend" id="legendBox">
+        <div class="lt">╋ Legend</div>
+        <div><span class="dot" style="background:#38bdf8;color:#38bdf8"></span>Left Child (L)</div>
+        <div><span class="dot" style="background:#52ff8a;color:#52ff8a"></span>Right Sibling (R)</div>
+      </div>
+
+      <div class="hint" id="hint">Click a node to select · use Inspector to add children</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+const $ = id => document.getElementById(id);
+const canvas       = $('canvas');
+const ctx          = canvas.getContext('2d');
+const wrap         = document.querySelector('.canvas-wrap');
+const logEl        = $('log');
+const inspectorBody= $('inspectorBody');
+
+const R = 22;
+const NODE_FONT  = 'italic 400 23px "Instrument Serif", serif';
+
+const esc = s => String(s).replace(/[&<>"']/g, c => (
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+));
+
+function roundRect(x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x,     y + h, r);
+  ctx.arcTo(x,     y + h, x,     y,     r);
+  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.closePath();
+}
+
+/* ============================================================
+   STATE
+   ============================================================ */
+let nodes = {}; 
+let rootId = null;
+let nodeSeq = 1;
+
+let selNode = null;
+let dragNode = null;
+let dragOffset = {x:0, y:0};
+
+let dragGroup = null;
+let activeHandle = null;
+let dragStartRect = null;
+let dragStartNodes = [];
+let dragCenter = {x:0, y:0};
+let dragStartAngle = 0;
+
+let marqueeStart = null;
+let marquee      = null;
+let marqueeSel   = { nodes: new Set() };
+
+let downPos = null;
+let moved = false;
+let mouse = {x:0, y:0};
+let hover = {node:null};
+
+let viewMode = 0; // 0=nary, 1=binary
+let currentVars = { nary: 1, binary: 0 };
+let targetVars = { nary: 1, binary: 0 };
+
+let binNodes = {};
+let binPositions = {};
+
+let dpr = 1;
+let gridPattern = null;
+
+/* ============================================================
+   LOGGING
+   ============================================================ */
+function log(text, cls){
+  const d = document.createElement('div');
+  d.className = 'log-line' + (cls ? ' ' + cls : '');
+  d.textContent = text;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+  while (logEl.children.length > 500) logEl.removeChild(logEl.firstChild);
+}
+function clearLog(){ logEl.innerHTML = ''; }
+
+/* ============================================================
+   CANVAS SETUP
+   ============================================================ */
+function buildGridPattern(){
+  const c = document.createElement('canvas');
+  c.width = c.height = 28;
+  const g = c.getContext('2d');
+  g.fillStyle = '#0a0904';
+  g.fillRect(0, 0, 28, 28);
+  g.fillStyle = 'rgba(255,184,74,0.14)';
+  g.beginPath(); g.arc(14, 14, 1.2, 0, Math.PI * 2); g.fill();
+  gridPattern = ctx.createPattern(c, 'repeat');
+}
+
+function resize(){
+  const r = wrap.getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1;
+  canvas.width  = Math.max(1, Math.round(r.width  * dpr));
+  canvas.height = Math.max(1, Math.round(r.height * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  
+  if (viewMode !== 0) buildBinaryTree();
+}
+
+buildGridPattern();
+new ResizeObserver(resize).observe(wrap);
+window.addEventListener('resize', resize);
+
+/* ============================================================
+   TREE LOGIC & GEOMETRY
+   ============================================================ */
+function getPos(ev){
+  const r = canvas.getBoundingClientRect();
+  return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+}
+
+function nodeAt(p){
+  for (const id in nodes){
+    const n = nodes[id];
+    if (Math.hypot(p.x - n.x, p.y - n.y) <= R + 5) return n;
+  }
+  return null;
+}
+
+function nextLabel() {
+  const used = new Set(Object.values(nodes).map(n => n.label));
+  for (let i = 0; i < 26; i++) {
+    const char = String.fromCharCode(65 + i);
+    if (!used.has(char)) return char;
+  }
+  return 'X';
+}
+
+function getSortedChildren(node) {
+  if (!node || !node.children) return [];
+  return node.children.slice().sort((a, b) => nodes[a].x - nodes[b].x);
+}
+
+function addNode(parent, count = 1) {
+  for (let k = 0; k < count; k++) {
+    const id = nodeSeq++;
+    const label = nextLabel();
+    
+    let x, y;
+    if (parent) {
+      const offset = (k - (count - 1) / 2) * 90;
+      x = parent.x + offset;
+      y = parent.y + 80;
+      
+      for (const nid in nodes) {
+        const n = nodes[nid];
+        if (Math.hypot(x - n.x, y - n.y) < 50) {
+          y += 40;
+        }
+      }
+    } else {
+      x = canvas.clientWidth / 2;
+      y = 100;
+    }
+
+    nodes[id] = { id, label, x, y, children: [] };
+    
+    if (parent) {
+      parent.children.push(id);
+    } else {
+      rootId = id;
+    }
+
+    selNode = id;
+  }
+  
+  clearMarqueeSel();
+  invalidate();
+  updateInspector();
+}
+
+function clearMarqueeSel(){
+  if (marqueeSel.nodes.size > 0){
+    marqueeSel = { nodes: new Set() };
+  }
+}
+
+function computeMarqueeSelection(r){
+  const selN = new Set();
+  for (const id in nodes) {
+    const n = nodes[id];
+    if (n.x >= r.x1 && n.x <= r.x2 && n.y >= r.y1 && n.y <= r.y2) {
+      selN.add(n.id);
+    }
+  }
+  return { nodes: selN };
+}
+
+function rectFromPoints(a, b){
+  return {
+    x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y),
+    x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y)
+  };
+}
+
+function getHandleAt(p, r) {
+  const hs = 10;
+  const cx = (r.x1 + r.x2) / 2;
+  const cy = (r.y1 + r.y2) / 2;
+  
+  if (Math.hypot(p.x - cx, p.y - (r.y1 - 30)) < 15) return 'rotate';
+  
+  if (Math.hypot(p.x - r.x1, p.y - r.y1) < hs) return 'tl';
+  if (Math.hypot(p.x - cx, p.y - r.y1) < hs) return 'tc';
+  if (Math.hypot(p.x - r.x2, p.y - r.y1) < hs) return 'tr';
+  if (Math.hypot(p.x - r.x1, p.y - cy) < hs) return 'ml';
+  if (Math.hypot(p.x - r.x2, p.y - cy) < hs) return 'mr';
+  if (Math.hypot(p.x - r.x1, p.y - r.y2) < hs) return 'bl';
+  if (Math.hypot(p.x - cx, p.y - r.y2) < hs) return 'bc';
+  if (Math.hypot(p.x - r.x2, p.y - r.y2) < hs) return 'br';
+  
+  if (p.x > r.x1 && p.x < r.x2 && p.y > r.y1 && p.y < r.y2) return 'move';
+  return null;
+}
+
+function invalidate() {
+  if (viewMode !== 0) buildBinaryTree();
+}
+
+/* ============================================================
+   DELETION & ROTATION
+   ============================================================ */
+function deleteSelection(){
+  const selected = Array.from(marqueeSel.nodes);
+  if (!selected.length) return;
+
+  const toDelete = new Set();
+  function collectSubtree(id) {
+    if (!id || !nodes[id]) return;
+    toDelete.add(id);
+    for (const c of nodes[id].children) collectSubtree(c);
+  }
+
+  for (const id of selected) collectSubtree(id);
+
+  for (const id of toDelete) delete nodes[id];
+  for (const pid in nodes) {
+    nodes[pid].children = nodes[pid].children.filter(cid => !toDelete.has(cid));
+  }
+
+  if (rootId && toDelete.has(rootId)) rootId = null;
+  if (selNode && toDelete.has(selNode)) selNode = null;
+
+  marqueeStart = null;
+  marquee = null;
+  marqueeSel = { nodes: new Set() };
+  invalidate();
+  updateInspector();
+}
+
+function deleteNode(id) {
+  if (!nodes[id]) return;
+  const toDelete = new Set();
+  function collectSubtree(id) {
+    if (!id || !nodes[id]) return;
+    toDelete.add(id);
+    for (const c of nodes[id].children) collectSubtree(c);
+  }
+  collectSubtree(id);
+
+  for (const delId of toDelete) delete nodes[delId];
+  for (const pid in nodes) {
+    nodes[pid].children = nodes[pid].children.filter(cid => !toDelete.has(cid));
+  }
+
+  if (rootId === id) rootId = null;
+  if (selNode === id) selNode = null;
+  invalidate();
+  updateInspector();
+}
+
+function rotateSelection(angleDeg){
+  const nIds = Array.from(marqueeSel.nodes);
+  if (!nIds.length) return;
+  
+  let cx = 0, cy = 0;
+  for (const id of nIds) {
+    const n = nodes[id];
+    cx += n.x; cy += n.y;
+  }
+  cx /= nIds.length; cy /= nIds.length;
+  
+  const rad = angleDeg * Math.PI / 180;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  
+  for (const id of nIds) {
+    const n = nodes[id];
+    const dx = n.x - cx, dy = n.y - cy;
+    n.x = cx + dx * cos - dy * sin;
+    n.y = cy + dx * sin + dy * cos;
+  }
+  
+  if (marquee) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const id of nIds) {
+        const n = nodes[id];
+        minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+        maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y);
+    }
+    marquee = { x1: minX - 20, y1: minY - 20, x2: maxX + 20, y2: maxY + 20 };
+  }
+  invalidate();
+}
+
+/* ============================================================
+   BINARY TREE CONVERSION & UNIFORM LAYOUT
+   ============================================================ */
+function buildBinaryTree() {
+  if (!rootId) return;
+  binNodes = {};
+  
+  function processSiblings(siblingIds) {
+    if (!siblingIds || siblingIds.length === 0) return;
+    for (let i = 0; i < siblingIds.length; i++) {
+      const currentId = siblingIds[i];
+      const nextSiblingId = i + 1 < siblingIds.length ? siblingIds[i + 1] : null;
+      
+      const nNode = nodes[currentId];
+      if (!nNode) continue;
+      
+      const children = getSortedChildren(nNode);
+      const firstChildId = children.length > 0 ? children[0] : null;
+      
+      binNodes[currentId] = {
+        id: currentId,
+        label: nNode.label,
+        left: firstChildId,
+        right: nextSiblingId
+      };
+      
+      if (children.length > 0) {
+        processSiblings(children);
+      }
+    }
+  }
+  processSiblings([rootId]);
+
+  binPositions = {};
+  
+  const dx = 80;
+  const dy = 90;
+
+  function layout(nodeId, depth, xOffset) {
+    if (!nodeId || !binNodes[nodeId]) return;
+    binPositions[nodeId] = { x: xOffset, y: depth * dy };
+    if (binNodes[nodeId].left) layout(binNodes[nodeId].left, depth + 1, xOffset - dx);
+    if (binNodes[nodeId].right) layout(binNodes[nodeId].right, depth + 1, xOffset + dx);
+  }
+
+  layout(rootId, 0, 0);
+
+  let minX = Infinity, maxX = -Infinity;
+  for (const id in binPositions) {
+    minX = Math.min(minX, binPositions[id].x);
+    maxX = Math.max(maxX, binPositions[id].x);
+  }
+  const treeWidth = maxX - minX;
+  const canvasWidth = canvas.clientWidth;
+  const maxAllowedWidth = canvasWidth - 100;
+  
+  let scale = 1;
+  if (treeWidth > maxAllowedWidth && treeWidth > 0) {
+    scale = maxAllowedWidth / treeWidth;
+  }
+  
+  const shiftX = (canvasWidth - treeWidth * scale) / 2 - minX * scale;
+
+  for (const id in binPositions) {
+    binPositions[id].x = binPositions[id].x * scale + shiftX;
+    binPositions[id].y = binPositions[id].y * scale + 100;
+  }
+}
+
+/* ============================================================
+   RENDERING
+   ============================================================ */
+function draw(now) {
+  const w = canvas.width / dpr;
+  const h = canvas.height / dpr;
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.fillStyle = gridPattern;
+  ctx.fillRect(0, 0, w, h);
+
+  // Smoothly lerp the variables
+  currentVars.nary += (targetVars.nary - currentVars.nary) * 0.1;
+  currentVars.binary += (targetVars.binary - currentVars.binary) * 0.1;
+  
+  // Interpolate node positions
+  const renderPos = {};
+  for (const id in nodes) {
+    const p0 = { x: nodes[id].x, y: nodes[id].y };
+    const p1 = binPositions[id] || p0;
+    
+    const t = currentVars.binary;
+    renderPos[id] = {
+      x: p0.x * (1 - t) + p1.x * t,
+      y: p0.y * (1 - t) + p1.y * t
+    };
+  }
+
+  // Draw N-ary Edges
+  if (currentVars.nary > 0.01) {
+    ctx.globalAlpha = currentVars.nary;
+    for (const id in nodes) {
+      const n = nodes[id];
+      for (const childId of n.children) {
+        if (!nodes[childId]) continue;
+        const p1 = renderPos[id];
+        const p2 = renderPos[childId];
+        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = '#4a3a1c'; ctx.lineWidth = 2.5; ctx.stroke();
+      }
+    }
+  }
+
+  // Draw Binary Left Edges
+  if (currentVars.binary > 0.01 && Object.keys(binPositions).length > 0) {
+    ctx.globalAlpha = currentVars.binary;
+    for (const id in binNodes) {
+      const bNode = binNodes[id];
+      const p1 = renderPos[id];
+      if (!p1) continue;
+      
+      if (bNode.left) {
+        const p2 = renderPos[bNode.left];
+        if (p2) {
+          ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+          ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2.5; ctx.stroke();
+          
+          const mx = (p1.x + p2.x) / 2;
+          const my = (p1.y + p2.y) / 2;
+          ctx.fillStyle = '#0a0904'; ctx.fillRect(mx - 12, my - 8, 16, 16);
+          ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 11px "JetBrains Mono"';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText('L', mx - 4, my);
+        }
+      }
+    }
+  }
+
+  // Draw Binary Right Edges
+  if (currentVars.binary > 0.01 && Object.keys(binPositions).length > 0) {
+    ctx.globalAlpha = currentVars.binary;
+    for (const id in binNodes) {
+      const bNode = binNodes[id];
+      const p1 = renderPos[id];
+      if (!p1) continue;
+      
+      if (bNode.right) {
+        const p2 = renderPos[bNode.right];
+        if (p2) {
+          ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+          ctx.strokeStyle = '#52ff8a'; ctx.lineWidth = 2.5; ctx.stroke();
+          
+          const mx = (p1.x + p2.x) / 2;
+          const my = (p1.y + p2.y) / 2;
+          ctx.fillStyle = '#0a0904'; ctx.fillRect(mx - 4, my - 8, 16, 16);
+          ctx.fillStyle = '#52ff8a'; ctx.font = 'bold 11px "JetBrains Mono"';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText('R', mx + 4, my);
+        }
+      }
+    }
+  }
+
+  // Draw Nodes
+  ctx.globalAlpha = 1;
+  for (const id in nodes) {
+    const n = nodes[id];
+    const pos = renderPos[id];
+    const isSel = selNode === n.id;
+    const isMarq = marqueeSel.nodes.has(n.id);
+    
+    let fill = '#161208', stroke = '#5a4522', txt = '#dbc080';
+    if (isSel) { stroke = '#ffb84a'; txt = '#ffb84a'; }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, R, 0, Math.PI * 2);
+    ctx.fillStyle = fill; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = stroke; ctx.stroke();
+    ctx.restore();
+
+    if (isSel) {
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.lineDashOffset = -((now / 40) % 8);
+      ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(pos.x, pos.y, R + 6, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+
+    if (isMarq) {
+      ctx.save();
+      ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 2.5;
+      ctx.shadowColor = 'rgba(255,184,74,.65)'; ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.arc(pos.x, pos.y, R + 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.fillStyle = txt; ctx.font = NODE_FONT;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, pos.x, pos.y + 0.5);
+    ctx.restore();
+  }
+
+  if (marquee) drawMarquee(marquee, now);
+}
+
+function drawMarquee(r, now) {
+  const x = r.x1, y = r.y1, w = r.x2 - r.x1, h = r.y2 - r.y1;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,184,74,0.07)';
+  ctx.fillRect(x, y, w, h);
+  ctx.setLineDash([7, 5]);
+  ctx.lineDashOffset = -((now / 40) % 12);
+  ctx.strokeStyle = '#ffb84a'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 2;
+  const t = 8;
+  ctx.beginPath();
+  ctx.moveTo(x, y + t); ctx.lineTo(x, y); ctx.lineTo(x + t, y);
+  ctx.moveTo(x + w - t, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + t);
+  ctx.moveTo(x + w, y + h - t); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - t, y + h);
+  ctx.moveTo(x + t, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - t);
+  ctx.stroke();
+  ctx.restore();
+
+  if (!marqueeStart && !activeHandle) {
+    const cx = (r.x1 + r.x2) / 2;
+    const cy = (r.y1 + r.y2) / 2;
+    
+    ctx.beginPath(); ctx.moveTo(cx, r.y1); ctx.lineTo(cx, r.y1 - 30);
+    ctx.strokeStyle = '#ffb84a'; ctx.stroke();
+
+    const drawHandle = (hx, hy, isRotate) => {
+      ctx.beginPath();
+      if (isRotate) ctx.arc(hx, hy, 5, 0, Math.PI * 2);
+      else ctx.rect(hx - 4, hy - 4, 8, 8);
+      ctx.fillStyle = '#ffb84a'; ctx.fill();
+      ctx.strokeStyle = '#0a0904'; ctx.lineWidth = 1.5; ctx.stroke();
+    };
+
+    drawHandle(cx, r.y1 - 30, true);
+    drawHandle(r.x1, r.y1); drawHandle(cx, r.y1); drawHandle(r.x2, r.y1);
+    drawHandle(r.x1, cy); drawHandle(r.x2, cy);
+    drawHandle(r.x1, r.y2); drawHandle(cx, r.y2); drawHandle(r.x2, r.y2);
+  }
+
+  const live = computeMarqueeSelection(r);
+  if (!live.nodes.size) return;
+
+  const nN = live.nodes.size;
+  const txt = `${nN} node${nN === 1 ? '' : 's'}  [⌫ delete]`;
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+
+  ctx.save();
+  ctx.font = '500 11px "JetBrains Mono", monospace';
+  const tw = ctx.measureText(txt).width;
+  const bw = tw + 18, bh = 20;
+
+  let bx = x + w - bw;
+  let by = y + h + 8;
+  if (by + bh > ch - 10) by = y - bh - 8;
+  bx = Math.max(10, Math.min(cw - bw - 10, bx));
+  by = Math.max(10, by);
+
+  ctx.fillStyle = 'rgba(10,9,4,.94)';
+  ctx.strokeStyle = 'rgba(255,184,74,.6)';
+  ctx.lineWidth = 1;
+  roundRect(bx, by, bw, bh, 4);
+  ctx.fill(); ctx.stroke();
+
+  ctx.fillStyle = '#ffb84a';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(txt, bx + bw / 2, by + bh / 2 + 0.5);
+  ctx.restore();
+}
+
+/* ============================================================
+   INSPECTOR
+   ============================================================ */
+function updateInspector() {
+  if (viewMode !== 0) {
+    inspectorBody.innerHTML = `
+      <div class="muted">
+        <b>Binary Tree View</b><br>
+        This shows the converted binary tree.<br><br>
+        • <span style="color:var(--blue)">L</span> (Blue) = First Child<br>
+        • <span style="color:var(--green)">R</span> (Green) = Next Sibling<br><br>
+        Editing is disabled in this view.
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="ghost" onclick="document.getElementById('convertBtn').click()">← Back to Editor</button>
+      </div>
+    `;
+    return;
+  }
+
+  if (selNode && nodes[selNode]) {
+    const n = nodes[selNode];
+    inspectorBody.innerHTML = `
+      <div class="field">
+        <label>Node Label</label>
+        <input id="inpLabel" maxlength="5" value="${esc(n.label)}" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="row">
+        <button id="btnAddChild">+ Add Child</button>
+      </div>
+      <div class="row">
+        <button class="danger" id="btnDelNode">Delete Subtree</button>
+      </div>
+      <div class="meta">id ${n.id} · x:${Math.round(n.x)} y:${Math.round(n.y)}</div>
+    `;
+
+    const inp = $('inpLabel');
+    inp.addEventListener('input', () => { n.label = inp.value; });
+    inp.addEventListener('change', () => {
+      if (!inp.value.trim()) n.label = '?';
+      updateInspector();
+    });
+    
+    $('btnAddChild').addEventListener('click', () => {
+      const countStr = prompt("How many children to add?", "1");
+      if (countStr === null) return;
+      const count = parseInt(countStr, 10);
+      if (!isNaN(count) && count > 0) addNode(n, count);
+    });
+    
+    $('btnDelNode').addEventListener('click', () => deleteNode(n.id));
+    return;
+  }
+
+  const mN = marqueeSel.nodes.size;
+  if (mN > 0) {
+    inspectorBody.innerHTML = `
+      <div class="muted">
+        <b>Box selection active</b><br>
+        ${mN} node${mN === 1 ? '' : 's'} selected.<br><br>
+        Drag to <b>move</b> the group.<br>
+        Drag the box to <b>rotate</b>.<br>
+        Press <b>Backspace</b> to delete.
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="btnRotL">↺ -90°</button>
+        <button id="btnRotR">↻ +90°</button>
+      </div>
+      <div class="row">
+        <button class="danger" id="btnDelBox">Delete Selection</button>
+      </div>
+    `;
+    $('btnRotL').addEventListener('click', () => rotateSelection(-90));
+    $('btnRotR').addEventListener('click', () => rotateSelection(90));
+    $('btnDelBox').addEventListener('click', deleteSelection);
+    return;
+  }
+
+  inspectorBody.innerHTML = `
+    <div class="muted">
+      Nothing selected.<br><br>
+      • Click a node to select it.<br>
+      • Add children to build the n-ary tree.<br>
+      • Drag on empty canvas to box-select.
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="btnAddRoot">+ Add Root Node</button>
+    </div>
+  `;
+  
+  $('btnAddRoot').addEventListener('click', () => {
+    if (rootId) {
+      alert("Root already exists. Select a node to add children.");
+      return;
+    }
+    addNode(null, 1);
+  });
+}
+
+/* ============================================================
+   POINTER INTERACTION
+   ============================================================ */
+function onDown(ev) {
+  if (viewMode !== 0) return;
+  if (ev.button !== undefined && ev.button !== 0) return;
+
+  const p = getPos(ev);
+  downPos = p;
+  moved = false;
+  mouse = p;
+
+  try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
+
+  const n = nodeAt(p);
+
+  if (marquee) {
+    const handle = getHandleAt(p, marquee);
+    if (handle) {
+      activeHandle = handle;
+      dragStartRect = { ...marquee };
+      dragStartNodes = Array.from(marqueeSel.nodes).map(id => {
+        const n = nodes[id];
+        return { id, x: n.x, y: n.y };
+      });
+      dragCenter = {
+        x: (marquee.x1 + marquee.x2) / 2,
+        y: (marquee.y1 + marquee.y2) / 2
+      };
+      if (handle === 'rotate') {
+        dragStartAngle = Math.atan2(p.y - dragCenter.y, p.x - dragCenter.x);
+      }
+      return;
+    }
+  }
+
+  if (n) {
+    selNode = n.id;
+    if (marqueeSel.nodes.has(n.id)) {
+      dragGroup = { startX: p.x, startY: p.y, nodes: [] };
+      for (const id of marqueeSel.nodes) {
+        const node = nodes[id];
+        dragGroup.nodes.push({ ref: node, initX: node.x, initY: node.y });
+      }
+    } else {
+      clearMarqueeSel();
+      dragNode = n;
+      dragOffset = { x: p.x - n.x, y: p.y - n.y };
+    }
+    updateInspector();
+  } else {
+    selNode = null;
+    clearMarqueeSel();
+    marqueeStart = { x: p.x, y: p.y };
+    marquee = null;
+    updateInspector();
+  }
+}
+
+function onMove(ev) {
+  if (viewMode !== 0) return;
+  const p = getPos(ev);
+  mouse = p;
+
+  if (downPos && Math.hypot(p.x - downPos.x, p.y - downPos.y) > 5) moved = true;
+
+  if (activeHandle) {
+    const dx = p.x - downPos.x;
+    const dy = p.y - downPos.y;
+
+    if (activeHandle === 'move') {
+      marquee.x1 = dragStartRect.x1 + dx;
+      marquee.y1 = dragStartRect.y1 + dy;
+      marquee.x2 = dragStartRect.x2 + dx;
+      marquee.y2 = dragStartRect.y2 + dy;
+      for (const item of dragStartNodes) {
+        const n = nodes[item.id];
+        n.x = item.x + dx;
+        n.y = item.y + dy;
+      }
+    } else if (activeHandle === 'rotate') {
+      const mouseAngle = Math.atan2(p.y - dragCenter.y, p.x - dragCenter.x);
+      const angleDelta = mouseAngle - dragStartAngle;
+      for (const item of dragStartNodes) {
+        const n = nodes[item.id];
+        const vx = item.x - dragCenter.x;
+        const vy = item.y - dragCenter.y;
+        n.x = dragCenter.x + vx * Math.cos(angleDelta) - vy * Math.sin(angleDelta);
+        n.y = dragCenter.y + vx * Math.sin(angleDelta) + vy * Math.cos(angleDelta);
+      }
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const id of marqueeSel.nodes) {
+        const n = nodes[id];
+        minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+        maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y);
+      }
+      marquee = { x1: minX - 20, y1: minY - 20, x2: maxX + 20, y2: maxY + 20 };
+    } else {
+      let newX1 = dragStartRect.x1, newY1 = dragStartRect.y1;
+      let newX2 = dragStartRect.x2, newY2 = dragStartRect.y2;
+
+      if (activeHandle.includes('l')) newX1 = p.x;
+      if (activeHandle.includes('r')) newX2 = p.x;
+      if (activeHandle.includes('t')) newY1 = p.y;
+      if (activeHandle.includes('b')) newY2 = p.y;
+
+      if (newX1 > newX2) { const tmp = newX1; newX1 = newX2; newX2 = tmp; }
+      if (newY1 > newY2) { const tmp = newY1; newY1 = newY2; newY2 = tmp; }
+
+      if (newX2 - newX1 < 10) newX2 = newX1 + 10;
+      if (newY2 - newY1 < 10) newY2 = newY1 + 10;
+
+      const fixedX = (activeHandle.includes('l')) ? dragStartRect.x2 : dragStartRect.x1;
+      const fixedY = (activeHandle.includes('t')) ? dragStartRect.y2 : dragStartRect.y1;
+
+      let scaleX = 1, scaleY = 1;
+      if (Math.abs(dragStartRect.x2 - dragStartRect.x1) > 1) {
+        scaleX = (newX2 - newX1) / (dragStartRect.x2 - dragStartRect.x1);
+      }
+      if (Math.abs(dragStartRect.y2 - dragStartRect.y1) > 1) {
+        scaleY = (newY2 - newY1) / (dragStartRect.y2 - dragStartRect.y1);
+      }
+
+      for (const item of dragStartNodes) {
+        const n = nodes[item.id];
+        n.x = fixedX + (item.x - fixedX) * scaleX;
+        n.y = fixedY + (item.y - fixedY) * scaleY;
+      }
+
+      marquee = { x1: newX1, y1: newY1, x2: newX2, y2: newY2 };
+    }
+    updateInspector();
+    return;
+  }
+
+  if (dragGroup){
+    const dx = p.x - dragGroup.startX;
+    const dy = p.y - dragGroup.startY;
+    for (const item of dragGroup.nodes) {
+      item.ref.x = Math.max(R, Math.min(canvas.clientWidth - R, item.initX + dx));
+      item.ref.y = Math.max(R, Math.min(canvas.clientHeight - R, item.initY + dy));
+    }
+    return;
+  }
+
+  if (dragNode) {
+    dragNode.x = Math.max(R, Math.min(canvas.clientWidth - R, p.x - dragOffset.x));
+    dragNode.y = Math.max(R, Math.min(canvas.clientHeight - R, p.y - dragOffset.y));
+    return;
+  }
+
+  if (marqueeStart && moved){
+    marquee = rectFromPoints(marqueeStart, p);
+    canvas.style.cursor = 'crosshair';
+  }
+
+  const n = nodeAt(p);
+  hover.node = n ? n.id : null;
+}
+
+function onUp(ev) {
+  if (viewMode !== 0) return;
+  if (!downPos) return;
+
+  if (activeHandle) {
+    activeHandle = null;
+    downPos = null;
+    moved = false;
+    return;
+  }
+
+  const p = getPos(ev);
+  const hadMarquee = !!marquee;
+
+  if (dragGroup){
+    dragGroup = null;
+  }
+  else if (dragNode) {
+    dragNode = null;
+  }
+  else if (hadMarquee) {
+    marqueeSel = computeMarqueeSelection(marquee);
+    const mN = marqueeSel.nodes.size;
+    if (mN > 0) log(`▣ Box selected ${mN} node${mN === 1 ? '' : 's'}`, 'muted');
+    updateInspector();
+  }
+
+  marqueeStart = null;
+  if (!(marqueeSel.nodes.size > 0)) {
+    marquee = null;
+  }
+  downPos = null;
+  moved = false;
+}
+
+canvas.addEventListener('pointerdown', onDown);
+canvas.addEventListener('pointermove', onMove);
+window.addEventListener('pointerup', onUp);
+canvas.addEventListener('pointerleave', () => { hover.node = null; });
+canvas.addEventListener('contextmenu', ev => ev.preventDefault());
+
+window.addEventListener('keydown', ev => {
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+  if (ev.key === 'Escape'){
+    marqueeStart = null;
+    marquee = null;
+    dragGroup = null;
+    activeHandle = null;
+    clearMarqueeSel();
+    if (!typing){ selNode = null; updateInspector(); }
+    else updateInspector();
+  }
+
+  if ((ev.key === 'Delete' || ev.key === 'Backspace') && !typing){
+    if (marqueeSel.nodes.size > 0){
+      ev.preventDefault();
+      deleteSelection();
+    } else if (selNode != null){
+      deleteNode(selNode);
+    }
+  }
+});
+
+/* ============================================================
+   PRESETS & STORAGE
+   ============================================================ */
+let customPresets = {};
+
+function loadCustomPresetsFromStorage() {
+  try {
+    const data = localStorage.getItem('tree_presets');
+    if (data) customPresets = JSON.parse(data);
+  } catch(e) {
+    customPresets = {};
+  }
+}
+
+function saveCustomPresetsToStorage() {
+  localStorage.setItem('tree_presets', JSON.stringify(customPresets));
+}
+
+function updatePresetDropdown() {
+  const sel = $('presetSel');
+  sel.innerHTML = '<option value="">load preset…</option>';
+  for (let key in customPresets) {
+    sel.innerHTML += `<option value="custom_${key}">${key}</option>`;
+  }
+}
+
+function updateDeleteButton() {
+  const val = $('presetSel').value;
+  if (val && val.startsWith('custom_')) {
+    $('deletePresetBtn').style.display = 'inline-block';
+  } else {
+    $('deletePresetBtn').style.display = 'none';
+  }
+}
+
+function loadPresetFromData(p) {
+  if (!p) return;
+  nodes = p.nodes;
+  rootId = p.rootId;
+  nodeSeq = p.nodeSeq;
+  
+  selNode = null;
+  marqueeStart = null;
+  marquee = null;
+  clearMarqueeSel();
+  
+  clearLog();
+  log(`Loaded preset.`, 'muted');
+  updateInspector();
+  if (viewMode !== 0) buildBinaryTree();
+}
+
+$('presetSel').addEventListener('change', ev => {
+  const v = ev.target.value;
+  if (!v) return;
+  if (v.startsWith('custom_')) {
+    const name = v.replace('custom_', '');
+    loadPresetFromData(customPresets[name]);
+  }
+  updateDeleteButton();
+});
+
+$('savePresetBtn').addEventListener('click', () => {
+  if (Object.keys(nodes).length === 0) {
+    alert("Tree is empty, nothing to save.");
+    return;
+  }
+  const name = prompt("Enter a name for this preset:");
+  if (!name || name.trim() === "") return;
+  
+  const cleanName = name.trim();
+  if (customPresets[cleanName]) {
+    alert("A preset with this name already exists. Please choose a different name.");
+    return;
+  }
+
+  customPresets[cleanName] = {
+    nodes: JSON.parse(JSON.stringify(nodes)),
+    rootId,
+    nodeSeq
+  };
+  
+  saveCustomPresetsToStorage();
+  updatePresetDropdown();
+  
+  $('presetSel').value = `custom_${cleanName}`;
+  updateDeleteButton();
+  log(`＋ Saved custom preset: ${cleanName}`, 'ok');
+});
+
+$('deletePresetBtn').addEventListener('click', () => {
+  const val = $('presetSel').value;
+  if (!val || !val.startsWith('custom_')) return;
+  
+  const name = val.replace('custom_', '');
+  if (!confirm(`Are you sure you want to delete the preset "${name}"?`)) return;
+
+  delete customPresets[name];
+  saveCustomPresetsToStorage();
+  updatePresetDropdown();
+  
+  $('presetSel').value = '';
+  updateDeleteButton();
+  log(`× Deleted custom preset: ${name}`, 'err');
+});
+
+/* ============================================================
+   UI WIRING & ANIMATION SEQUENCE
+   ============================================================ */
+$('convertBtn').addEventListener('click', () => {
+  if (!rootId) {
+    log('⚠ Tree is empty. Add nodes first.', 'err');
+    return;
+  }
+  
+  viewMode = (viewMode + 1) % 2;
+  
+  if (viewMode === 0) {
+    targetVars = { nary: 1, binary: 0 };
+    $('convertBtn').textContent = 'view binary';
+    $('sysMode').textContent = 'N-ARY TREE';
+    $('hint').textContent = 'Click a node to select · use Inspector to add children';
+    $('legendBox').style.display = 'none';
+  } else {
+    buildBinaryTree();
+    targetVars = { nary: 0, binary: 1 };
+    $('convertBtn').textContent = 'view n-ary';
+    $('sysMode').textContent = 'BINARY TREE';
+    $('hint').textContent = 'Binary Tree Conversion View.';
+    $('legendBox').style.display = 'flex';
+  }
+  
+  selNode = null;
+  updateInspector();
+});
+
+$('clearBtn').addEventListener('click', () => {
+  if (Object.keys(nodes).length && !confirm('Delete entire tree?')) return;
+  viewMode = 0;
+  nodes = {};
+  rootId = null;
+  nodeSeq = 1;
+  targetVars = { nary: 1, binary: 0 };
+  currentVars = { nary: 1, binary: 0 };
+  $('convertBtn').textContent = 'view binary';
+  $('sysMode').textContent = 'N-ARY TREE';
+  $('hint').textContent = 'Click a node to select · use Inspector to add children';
+  $('legendBox').style.display = 'none';
+  updateInspector();
+  clearLog();
+  log('Tree cleared.', 'muted');
+});
+
+/* ============================================================
+   PDF EXPORT
+   ============================================================ */
+function createExportCanvas(mode) {
+  if (Object.keys(nodes).length === 0) return null;
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let positions = nodes;
+  if (mode === 'binary') positions = binPositions;
+
+  for (const id in positions) {
+    const p = positions[id];
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+  }
+
+  const pad = 100;
+  const w = maxX - minX + pad * 2;
+  const h = maxY - minY + pad * 2;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ex = c.getContext('2d');
+  
+  ex.fillStyle = '#ffffff'; ex.fillRect(0, 0, w, h);
+  ex.translate(pad - minX, pad - minY);
+
+  function getPos(id) {
+    if (mode === 'binary') return binPositions[id];
+    return nodes[id];
+  }
+
+  // Draw edges
+  if (mode === 'nary') {
+    for (const id in nodes) {
+      const n = nodes[id];
+      for (const childId of n.children) {
+        ex.beginPath(); ex.moveTo(n.x, n.y); ex.lineTo(nodes[childId].x, nodes[childId].y);
+        ex.strokeStyle = '#000'; ex.lineWidth = 2; ex.stroke();
+      }
+    }
+  } else {
+    for (const id in binNodes) {
+      const bNode = binNodes[id];
+      const p1 = getPos(id);
+      
+      if (bNode.left) {
+        const p2 = getPos(bNode.left);
+        ex.beginPath(); ex.moveTo(p1.x, p1.y); ex.lineTo(p2.x, p2.y);
+        ex.strokeStyle = '#1e3a8a'; ex.lineWidth = 2; ex.stroke();
+        const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        ex.fillStyle = '#1e3a8a'; ex.font = 'bold 12px "Times New Roman"';
+        ex.textAlign = 'center'; ex.textBaseline = 'middle';
+        ex.fillText('L', mx - 10, my);
+      }
+      
+      if (bNode.right) {
+        const p2 = getPos(bNode.right);
+        ex.beginPath(); ex.moveTo(p1.x, p1.y); ex.lineTo(p2.x, p2.y);
+        ex.strokeStyle = '#166534'; ex.lineWidth = 2; ex.stroke();
+        const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        ex.fillStyle = '#166534'; ex.font = 'bold 12px "Times New Roman"';
+        ex.textAlign = 'center'; ex.textBaseline = 'middle';
+        ex.fillText('R', mx + 10, my);
+      }
+    }
+  }
+
+  // Draw nodes
+  const labelPos = positions;
+  for (const id in labelPos) {
+    const pos = labelPos[id];
+    ex.beginPath(); ex.arc(pos.x, pos.y, R, 0, Math.PI * 2);
+    ex.fillStyle = '#fff'; ex.fill();
+    ex.strokeStyle = '#000'; ex.lineWidth = 3; ex.stroke();
+    ex.fillStyle = '#000'; ex.font = 'bold 20px "Times New Roman"';
+    ex.textAlign = 'center'; ex.textBaseline = 'middle';
+    ex.fillText(nodes[id].label, pos.x, pos.y + 1);
+  }
+
+  return c.toDataURL('image/png');
+}
+
+function createPDFStepCanvas(mode) {
+  if (Object.keys(nodes).length === 0) return null;
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const id in nodes) {
+    const n = nodes[id];
+    minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y);
+  }
+
+  const pad = 100;
+  const w = maxX - minX + pad * 2;
+  const h = maxY - minY + pad * 2;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ex = c.getContext('2d');
+  
+  ex.fillStyle = '#ffffff'; ex.fillRect(0, 0, w, h);
+  ex.translate(pad - minX, pad - minY);
+
+  // Draw faded original edges as background
+  ex.strokeStyle = '#e0e0e0'; ex.lineWidth = 1.5;
+  for (const id in nodes) {
+    const n = nodes[id];
+    for (const childId of n.children) {
+      ex.beginPath(); ex.moveTo(n.x, n.y); ex.lineTo(nodes[childId].x, nodes[childId].y); ex.stroke();
+    }
+  }
+
+  // Draw left edges
+  if (mode === 'left' || mode === 'both') {
+    for (const id in binNodes) {
+      const bNode = binNodes[id];
+      const p1 = nodes[id];
+      if (bNode.left) {
+        const p2 = nodes[bNode.left];
+        ex.beginPath(); ex.moveTo(p1.x, p1.y); ex.lineTo(p2.x, p2.y);
+        ex.strokeStyle = '#1e3a8a'; ex.lineWidth = 3; ex.stroke();
+        const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        ex.fillStyle = '#1e3a8a'; ex.font = 'bold 12px "Times New Roman"';
+        ex.textAlign = 'center'; ex.textBaseline = 'middle';
+        ex.fillText('L', mx - 10, my);
+      }
+    }
+  }
+
+  // Draw right edges
+  if (mode === 'right' || mode === 'both') {
+    for (const id in binNodes) {
+      const bNode = binNodes[id];
+      const p1 = nodes[id];
+      if (bNode.right) {
+        const p2 = nodes[bNode.right];
+        ex.beginPath(); ex.moveTo(p1.x, p1.y); ex.lineTo(p2.x, p2.y);
+        ex.strokeStyle = '#166534'; ex.lineWidth = 3; ex.stroke();
+        const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        ex.fillStyle = '#166534'; ex.font = 'bold 12px "Times New Roman"';
+        ex.textAlign = 'center'; ex.textBaseline = 'middle';
+        ex.fillText('R', mx + 10, my);
+      }
+    }
+  }
+
+  // Draw nodes
+  for (const id in nodes) {
+    const n = nodes[id];
+    ex.beginPath(); ex.arc(n.x, n.y, R, 0, Math.PI * 2);
+    ex.fillStyle = '#fff'; ex.fill();
+    ex.strokeStyle = '#000'; ex.lineWidth = 3; ex.stroke();
+    ex.fillStyle = '#000'; ex.font = 'bold 20px "Times New Roman"';
+    ex.textAlign = 'center'; ex.textBaseline = 'middle';
+    ex.fillText(n.label, n.x, n.y + 1);
+  }
+
+  return c.toDataURL('image/png');
+}
+
+$('pdfBtn').addEventListener('click', () => {
+  if (Object.keys(nodes).length === 0) return log('⚠ Tree is empty.', 'err');
+
+  buildBinaryTree();
+
+  const imgOriginal = createExportCanvas('nary');
+  const imgLeft = createPDFStepCanvas('left');
+  const imgRight = createPDFStepCanvas('right');
+  const imgBoth = createPDFStepCanvas('both');
+  const imgBinary = createExportCanvas('binary');
+  
+  const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const pdfDiv = document.createElement('div');
+  pdfDiv.className = 'pdf-container';
+  
+  // PAGE 1: Original Graph
+  const page1 = document.createElement('div');
+  page1.style.pageBreakAfter = 'always';
+  page1.innerHTML = `
+      <div style="text-align: center; font-size: 14px; margin-bottom: 20pt;">${dateStr}</div>
+      <h1>N-ary to Binary Tree Conversion</h1>
+      <h2>Original N-ary Tree</h2>
+      <p>This is the starting tree structure. We will convert it into a binary tree using the Left-Child / Right-Sibling representation.</p>
+      <div style="text-align: center; margin: 20pt 0;">
+          <img src="${imgOriginal}" style="max-width: 100%; height: auto; border: 1pt solid #000;" />
+      </div>
+  `;
+  pdfDiv.appendChild(page1);
+
+  // PAGE 2: Final Converted Graph
+  const page2 = document.createElement('div');
+  page2.style.pageBreakAfter = 'always';
+  page2.innerHTML = `
+      <h2>Converted Final Graph</h2>
+      <p>The tree has been fully converted to binary format. The <b>Left</b> pointer (Blue) points to the first child, and the <b>Right</b> pointer (Green) points to the next sibling.</p>
+      <div style="text-align: center; margin: 20pt 0;">
+          <img src="${imgBinary}" style="max-width: 100%; height: auto; border: 1pt solid #000;" />
+      </div>
+  `;
+  pdfDiv.appendChild(page2);
+
+  // PAGE 3: Conversion Steps (2x2 Grid)
+  const page3 = document.createElement('div');
+  page3.innerHTML = `
+      <h2>Conversion Steps</h2>
+      <p>Here is a breakdown of how the edges were transformed.</p>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20pt; align-items: center; margin-top: 20pt;">
+          <div style="text-align: center;">
+              <img src="${imgLeft}" style="width: 100%; height: auto; border: 1pt solid #000;" />
+              <p style="margin-top: 10pt; font-size: 12px;"><b>Step 1: Left-Child Edges</b><br>Each parent connects to its first child.</p>
+          </div>
+          <div style="text-align: center;">
+              <img src="${imgRight}" style="width: 100%; height: auto; border: 1pt solid #000;" />
+              <p style="margin-top: 10pt; font-size: 12px;"><b>Step 2: Right-Sibling Edges</b><br>Each child connects to its next sibling.</p>
+          </div>
+          <div style="text-align: center;">
+              <img src="${imgBoth}" style="width: 100%; height: auto; border: 1pt solid #000;" />
+              <p style="margin-top: 10pt; font-size: 12px;"><b>Step 3: Combined Edges</b><br>Both edge types in the original layout.</p>
+          </div>
+          <div style="text-align: center;">
+              <img src="${imgBinary}" style="width: 100%; height: auto; border: 1pt solid #000;" />
+              <p style="margin-top: 10pt; font-size: 12px;"><b>Final Graph</b><br>The aligned binary tree structure.</p>
+          </div>
+      </div>
+  `;
+  pdfDiv.appendChild(page3);
+
+  document.body.appendChild(pdfDiv);
+
+  const opt = {
+      margin:       0,
+      filename:     `Tree_Conversion_Report.pdf`,
+      image:        { type: 'jpeg', quality: 1.0 },
+      html2canvas:  { scale: 2, useCORS: true, logging: false },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak:    { mode: ['css', 'legacy'] }
+  };
+
+  html2pdf().set(opt).from(pdfDiv).toPdf().get('pdf').then(function(pdf) {
+      const totalPages = pdf.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+          pdf.setPage(i);
+          pdf.setDrawColor(0, 0, 0);
+          pdf.setLineWidth(1);
+          pdf.rect(5, 5, 200, 287);
+      }
+  }).save().then(() => {
+      document.body.removeChild(pdfDiv);
+  });
+});
+
+/* ============================================================
+   STATUS STRIP + CLOCK
+   ============================================================ */
+function updateSys(){
+  $('sysNodes').textContent = Object.keys(nodes).length;
+}
+
+function tickClock(){
+  const d = new Date(), z = n => String(n).padStart(2,'0');
+  const el = $('clock'); if (el) el.textContent = z(d.getUTCHours())+':'+z(d.getUTCMinutes())+':'+z(d.getUTCSeconds())+'Z';
+}
+tickClock(); setInterval(tickClock, 1000);
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+function frame(now){
+  updateSys();
+  draw(now);
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+resize();
+updateInspector();
+loadCustomPresetsFromStorage();
+updatePresetDropdown();
+$('legendBox').style.display = 'none';
+
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
