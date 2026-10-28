@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Calculus Visualizer / ƒ, ƒ′, ƒ″</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.1/math.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js" charset="utf-8"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#0a0904; --panel:#161208; --panel2:#1d170b; --ink:#ffb84a; --dim:#7a5f30; --paper:#f3e6c4;
+  --body:#bda874; --green:#52ff8a; --red:#ff5252;
+  --line:rgba(255,184,74,.18); --line2:rgba(255,184,74,.32);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;line-height:1.4;background:var(--bg);color:var(--ink);overflow:hidden;-webkit-font-smoothing:antialiased}
+::selection{background:var(--ink);color:var(--bg)}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh;position:relative}
+
+/* CRT overlays */
+.scan{position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(180deg,rgba(255,184,74,0) 0,rgba(255,184,74,0) 2px,rgba(255,184,74,.04) 2px,rgba(255,184,74,.04) 3px);mix-blend-mode:overlay}
+.grain{position:fixed;inset:0;pointer-events:none;z-index:9998;opacity:.08;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+.vignette{position:fixed;inset:0;pointer-events:none;z-index:9997;background:radial-gradient(ellipse at 50% 50%,transparent 45%,rgba(0,0,0,.45))}
+@keyframes blink{50%{opacity:.3}}
+
+/* ---------- Top bar ---------- */
+.topbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 12px;background:rgba(10,9,4,.96);border-bottom:1px solid var(--line2);position:relative;z-index:10;font-size:11px;letter-spacing:.04em}
+.brand{font-weight:700;font-size:13px;letter-spacing:.06em;display:flex;align-items:center;gap:8px;margin-right:8px;white-space:nowrap;color:var(--ink);text-transform:uppercase}
+.brand::before{content:"";width:8px;height:8px;background:var(--green);box-shadow:0 0 10px var(--green);animation:blink 1.4s infinite}
+.brand span{color:var(--dim);font-weight:400}
+.spacer{flex:1}
+.clock{color:var(--dim);font-size:10px;white-space:nowrap;margin-left:6px}
+.clock b{color:var(--ink);font-weight:500}
+
+button{font-family:inherit;font-size:11px;font-weight:500;letter-spacing:.05em;color:var(--dim);background:none;border:1px solid transparent;padding:4px 8px;border-radius:0;cursor:pointer;transition:color .15s,background .15s,border-color .15s,box-shadow .2s;white-space:nowrap}
+button:hover{color:var(--ink)}
+button:active{transform:translateY(1px)}
+button.primary{border-color:var(--ink);color:var(--ink);text-transform:uppercase;padding:6px 12px}
+button.primary::before{content:"$ ";color:var(--green)}
+button.primary:hover{background:var(--ink);color:var(--bg);box-shadow:0 0 18px rgba(255,184,74,.4)}
+button.primary:hover::before{color:var(--bg)}
+button.ghost{border-color:var(--line2);color:var(--body)}
+button.ghost:hover{border-color:var(--ink);color:var(--ink)}
+
+/* ---------- Layout ---------- */
+.main-content{flex:1;min-height:0;padding:8px 12px;display:flex;justify-content:center;overflow:hidden;}
+.container{width:100%;max-width:1600px;display:flex;flex-direction:column;height:100%;min-height:0;}
+.view-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:1px solid var(--line2);padding-bottom:6px;flex-shrink:0;}
+.view-title{font-size:13px;color:var(--ink);text-transform:uppercase;letter-spacing:.1em;font-weight:600;margin:0;display:flex;align-items:center;gap:8px;}
+.view-title::before{content:"»";color:var(--dim);}
+
+/* Main Grid */
+.main-grid{display:grid;grid-template-columns:280px minmax(0,1fr);gap:10px;flex:1;min-height:0;}
+
+/* Panels & Cards */
+.panel{background:var(--panel);border:1px solid var(--line2);border-radius:4px;padding:10px 12px;margin-bottom:8px;box-shadow:0 4px 20px rgba(0,0,0,.4);}
+.panel h3{margin:0 0 8px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);font-weight:500;display:flex;align-items:center;gap:6px;border-bottom:1px dashed var(--line);padding-bottom:6px;}
+.panel h3::before{content:"╋";color:var(--ink);}
+
+/* Inputs */
+.field-label{display:block;font-size:8.5px;font-weight:600;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);margin-bottom:4px;}
+input[type="text"], input[type="number"]{font-family:inherit;font-size:11px;color:var(--paper);background:var(--bg);border:1px solid var(--line2);padding:5px 8px;border-radius:0;outline:none;transition:border-color .15s, box-shadow .15s;width:100%;}
+input[type="text"]:focus, input[type="number"]:focus{border-color:var(--ink);box-shadow:0 0 0 2px rgba(255,184,74,.12);}
+
+/* Sliders */
+input[type="range"].std-range { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; width: 100%; }
+input[type="range"].std-range::-webkit-slider-runnable-track { height: 2px; border-radius: 0; background: var(--line2); }
+input[type="range"].std-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; margin-top: -5px; height: 12px; width: 12px; border-radius: 0; background: var(--ink); border: none; box-shadow: 0 0 8px rgba(255,184,74,.5); }
+input[type="range"].std-range::-moz-range-track { height: 2px; border-radius: 0; background: var(--line2); }
+input[type="range"].std-range::-moz-range-thumb { height: 12px; width: 12px; border: none; border-radius: 0; background: var(--ink); }
+
+/* Custom Toggle Chips */
+.toggle-chip{position:relative;display:inline-flex;align-items:center;gap:4px;padding:3px 6px;border-radius:0;font-size:9.5px;font-weight:500;letter-spacing:.05em;background:var(--bg);border:1px solid var(--line2);color:var(--dim);cursor:pointer;user-select:none;transition:all .15s;}
+.toggle-chip:hover{border-color:var(--ink);color:var(--body);}
+.toggle-chip input{position:absolute;opacity:0;pointer-events:none;}
+.toggle-chip .dot{width:5px;height:5px;border-radius:0;background:var(--c);opacity:0.28;transition:opacity .15s,box-shadow .15s;}
+.toggle-chip input:checked ~ .dot{opacity:1;box-shadow:0 0 6px var(--c);}
+.toggle-chip input:checked ~ .lbl{color:var(--paper);}
+.toggle-chip:has(input:checked){background:rgba(255,184,74,.05);border-color:var(--c);}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:3px;padding:2px 5px;border-radius:2px;font-size:8.5px;font-weight:600;border:1px solid;letter-spacing:.05em;text-transform:uppercase;}
+.b-up{background:rgba(82,255,138,.1);color:var(--green);border-color:rgba(82,255,138,.3);}
+.b-down{background:rgba(255,82,82,.1);color:var(--red);border-color:rgba(255,82,82,.3);}
+.b-flat{background:rgba(255,184,74,.1);color:var(--ink);border-color:rgba(255,184,74,.3);}
+.b-info{background:rgba(255,184,74,.05);color:var(--body);border-color:var(--line2);}
+.b-violet{background:rgba(181,127,255,.1);color:#b57fff;border-color:rgba(181,127,255,.3);}
+.b-neutral{background:rgba(255,184,74,.05);color:var(--dim);border-color:var(--line);}
+
+/* Stat Boxes */
+.stat-box{background:var(--bg);border:1px solid var(--line);border-radius:2px;padding:6px 8px;}
+.stat-label{font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin-bottom:2px;}
+.stat-value{font-family:inherit;font-size:12px;color:var(--ink);line-height:1.1;font-weight:600;}
+
+/* Reset View Button */
+.graph-btn {display:inline-flex;align-items:center;gap:4px;padding:4px 8px;font-size:9.5px;font-weight:600;letter-spacing:.05em;background:rgba(10,9,4,0.85);border:1px solid var(--line2);color:var(--body);border-radius:0;cursor:pointer;transition:all .15s;backdrop-filter:blur(4px);}
+.graph-btn:hover {background:rgba(255,184,74,0.1);border-color:var(--ink);color:var(--ink);}
+
+/* Plot Container */
+.plot-container { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.plot-panel { flex: 1; position: relative; min-height: 0; overflow: hidden; background: var(--panel); border: 1px solid var(--line2); border-radius: 4px; }
+#plot { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+/* Sidebar */
+aside { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden; }
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#3a2e18}
+::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+</style>
+</head>
+
+<body>
+
+<div class="scan"></div>
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<div class="app">
+  <header class="topbar">
+    <button class="ghost" onclick="window.location.href='index.html#semester-02'" style="margin-right: 4px;">↩ back</button>
+    <div class="brand">Calculus <span>/ visualizer</span></div>
+    <div class="spacer"></div>
+    <div class="clock">SYS · <b id="clock">--:--:--</b></div>
+  </header>
+
+  <div class="main-content">
+    <div class="container">
+      
+      <div class="view-header">
+        <h1 class="view-title">ƒ, ƒ′, ƒ″ Overlay</h1>
+        <div id="expr-display" class="font-mono text-[9.5px] leading-relaxed text-[var(--body)] bg-[rgba(255,184,74,0.05)] border border-[var(--line2)] rounded-[2px] px-2 py-1"></div>
+      </div>
+
+      <div class="main-grid">
+
+        <!-- ── LEFT: Controls + ƒ(x) analysis ──────────────────── -->
+        <aside>
+
+          <!-- Controls -->
+          <div class="panel">
+            <h3>Controls</h3>
+            
+            <div class="mb-3">
+              <label for="fn-input" class="field-label">Function ƒ(x)</label>
+              <div class="flex flex-col gap-1.5">
+                <input id="fn-input" type="text" spellcheck="false" autocomplete="off" value="x^3 - 3*x" />
+                <button id="plot-btn" class="primary">plot</button>
+              </div>
+              <p id="error" class="hidden text-[9px] text-[var(--red)] mt-1 font-mono"></p>
+            </div>
+
+            <div class="mb-3">
+              <label class="field-label">Inspect point · x = c</label>
+              <div class="flex items-center gap-2 mb-1">
+                <input id="c-input" type="number" step="0.1" value="1" class="w-16" />
+                <span id="c-hint" class="text-[8.5px] text-[var(--dim)] font-mono">slider below</span>
+              </div>
+              <input id="c-slider" type="range" class="std-range" min="-20" max="20" step="0.001" value="1" />
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="field-label mb-0">Visible series</span>
+                <div class="flex gap-1">
+                  <button id="all-on" class="text-[8.5px] font-semibold uppercase text-[var(--dim)] hover:text-[var(--ink)] transition">All</button>
+                  <span class="text-[var(--line2)]">·</span>
+                  <button id="all-off" class="text-[8.5px] font-semibold uppercase text-[var(--dim)] hover:text-[var(--ink)] transition">None</button>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <label class="toggle-chip" style="--c:#ffb84a;">
+                  <input type="checkbox" class="series-toggle" data-group="f" checked>
+                  <span class="dot"></span><span class="lbl font-mono">ƒ(x)</span>
+                </label>
+                <label class="toggle-chip" style="--c:#52ff8a;">
+                  <input type="checkbox" class="series-toggle" data-group="d1" checked>
+                  <span class="dot"></span><span class="lbl font-mono">ƒ′(x)</span>
+                </label>
+                <label class="toggle-chip" style="--c:#ff5252;">
+                  <input type="checkbox" class="series-toggle" data-group="d2" checked>
+                  <span class="dot"></span><span class="lbl font-mono">ƒ″(x)</span>
+                </label>
+                <label class="toggle-chip" style="--c:#f3e6c4;">
+                  <input type="checkbox" class="series-toggle" data-group="tangent" checked>
+                  <span class="dot"></span><span class="lbl">Tangent</span>
+                </label>
+                <label class="toggle-chip" style="--c:#b57fff;">
+                  <input type="checkbox" class="series-toggle" data-group="structural" checked>
+                  <span class="dot"></span><span class="lbl">Extrema</span>
+                </label>
+                <label class="toggle-chip" style="--c:#bda874;">
+                  <input type="checkbox" class="series-toggle" data-group="points" checked>
+                  <span class="dot"></span><span class="lbl">Points</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Analysis Card -->
+          <div id="analysis"></div>
+
+        </aside>
+
+        <!-- ── RIGHT: Graph only ───────────────────────────────── -->
+        <main class="plot-container">
+          <div class="plot-panel">
+            <div class="absolute top-2 left-3 z-10 flex gap-2">
+              <button id="reset-view-btn" class="graph-btn" title="Reset view">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path>
+                </svg>
+                Reset
+              </button>
+            </div>
+
+            <div class="absolute top-2 right-3 z-10 text-[8.5px] uppercase tracking-widest text-[var(--dim)] pointer-events-none text-right leading-relaxed">
+              <div>scroll · drag · dbl-click</div>
+            </div>
+
+            <div id="plot"></div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const COL = {
+    f:    '#ffb84a',
+    d1:   '#52ff8a',
+    d2:   '#ff5252',
+    accent: '#f3e6c4',
+    max:  '#ff5252',
+    min:  '#52ff8a',
+    infl: '#b57fff'
+  };
+
+  const B = {
+    up:      'b-up',
+    down:    'b-down',
+    flat:    'b-flat',
+    info:    'b-info',
+    violet:  'b-violet',
+    neutral: 'b-neutral'
+  };
+
+  const EPS = 1e-7;
+
+  const IX = {
+    f: 0, d1: 1, d2: 2,
+    tangent: 3,
+    pF: 4, pD1: 5, pD2: 6,
+    maxima: 7, minima: 8, infl: 9
+  };
+
+  const GROUPS = {
+    f:          [IX.f],
+    d1:         [IX.d1],
+    d2:         [IX.d2],
+    tangent:    [IX.tangent],
+    points:     [IX.pF, IX.pD1, IX.pD2],
+    structural: [IX.maxima, IX.minima, IX.infl]
+  };
+
+  const INITIAL_MIN = -20;
+  const INITIAL_MAX =  20;
+  const FIXED_RES = 800; // Reduced for performance (still visually perfect)
+
+  const els = {
+    fnInput:   document.getElementById('fn-input'),
+    plotBtn:   document.getElementById('plot-btn'),
+    error:     document.getElementById('error'),
+    cInput:    document.getElementById('c-input'),
+    cSlider:   document.getElementById('c-slider'),
+    cHint:     document.getElementById('c-hint'),
+    plot:      document.getElementById('plot'),
+    analysis:  document.getElementById('analysis'),
+    exprDisp:  document.getElementById('expr-display'),
+    allOn:     document.getElementById('all-on'),
+    allOff:    document.getElementById('all-off'),
+    resetBtn:  document.getElementById('reset-view-btn')
+  };
+
+  const S = {
+    expr: 'x^3 - 3*x',
+    xmin: INITIAL_MIN, xmax: INITIAL_MAX,
+    n: FIXED_RES,
+    c: 1,
+    F: null, F1: null, F2: null, F3: null,
+    str: { f: '', f1: '', f2: '', f3: '' },
+    xs: [], y0: [], y1: [], y2: [],
+    roots1: [], roots2: []
+  };
+
+  let lastSampledRange = [NaN, NaN];
+
+  const CONFIG = {
+    responsive: false, // Disabled internal loop
+    displaylogo: false,
+    scrollZoom: true,
+    doubleClick: 'reset+autosize',
+    modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d', 'toggleSpikelines']
+  };
+
+  let plotReady = false;
+  let cRaf = null;
+  let resampleTimer = null;
+  let relayoutLock = false;
+
+  const esc = s => String(s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+
+  function fmt(v, d = 4) {
+    if (v === null || v === undefined || !isFinite(v)) return '—';
+    if (v === 0) return '0';
+    const a = Math.abs(v);
+    if (a >= 1e5 || a < 1e-4) return v.toExponential(2);
+    const s = v.toFixed(d);
+    return s.replace(/\.?0+$/, '') || '0';
+  }
+
+  function ev(node, x) {
+    if (!node) return NaN;
+    try {
+      const v = node.evaluate({ x });
+      return (typeof v === 'number' && isFinite(v)) ? v : NaN;
+    } catch (_) { return NaN; }
+  }
+
+  function showError(msg) { els.error.textContent = msg; els.error.classList.remove('hidden'); }
+  function clearError()   { els.error.classList.add('hidden'); els.error.textContent = ''; }
+
+  function parseAndBuild() {
+    const raw = els.fnInput.value.trim();
+    if (!raw) { showError('Please enter a function of x.'); return false; }
+
+    let node;
+    try { node = math.parse(raw); }
+    catch (e) { showError('Parse error: ' + e.message); return false; }
+
+    let d1, d2, d3;
+    try {
+      d1 = math.derivative(node, 'x');
+      d2 = math.derivative(d1, 'x');
+      d3 = math.derivative(d2, 'x');
+    } catch (e) {
+      showError('Could not differentiate: ' + e.message);
+      return false;
+    }
+
+    try {
+      S.F  = node.compile();
+      S.F1 = d1.compile();
+      S.F2 = d2.compile();
+      S.F3 = d3.compile();
+    } catch (e) {
+      showError('Could not compile expression: ' + e.message);
+      return false;
+    }
+
+    S.expr = raw;
+    S.str = { f: node.toString(), f1: d1.toString(), f2: d2.toString(), f3: d3.toString() };
+    clearError();
+    return true;
+  }
+
+  function capSeries(ys) {
+    const vals = [];
+    for (let i = 0; i < ys.length; i++) {
+      const v = ys[i];
+      if (isFinite(v)) vals.push(Math.abs(v));
+    }
+    if (!vals.length) return ys.map(v => isFinite(v) ? v : null);
+
+    vals.sort((a, b) => a - b);
+    const p95 = vals[Math.floor(vals.length * 0.95)];
+    if (!(p95 > 0)) return ys.map(v => isFinite(v) ? v : null);
+
+    const cap = p95 * 20;
+    return ys.map(v => (isFinite(v) && Math.abs(v) <= cap) ? v : null);
+  }
+
+  function sample() {
+    const n = S.n;
+    const span = S.xmax - S.xmin;
+    const step = span / (n - 1);
+    const xs = new Array(n), y0 = new Array(n), y1 = new Array(n), y2 = new Array(n);
+
+    for (let i = 0; i < n; i++) {
+      const x = S.xmin + i * step;
+      xs[i] = x;
+      const a = ev(S.F,  x);
+      const b = ev(S.F1, x);
+      const c = ev(S.F2, x);
+      y0[i] = isFinite(a) ? a : NaN;
+      y1[i] = isFinite(b) ? b : NaN;
+      y2[i] = isFinite(c) ? c : NaN;
+    }
+
+    S.xs = xs;
+    S.y0 = capSeries(y0);
+    S.y1 = capSeries(y1);
+    S.y2 = capSeries(y2);
+  }
+
+  function findRoots(fn) {
+    const n = Math.min(2000, Math.max(800, S.n));
+    const xmin = S.xmin, xmax = S.xmax;
+    if (!(xmax > xmin)) return [];
+
+    const dx = (xmax - xmin) / (n - 1);
+    const xs = new Array(n), ys = new Array(n);
+    let maxAbs = 0;
+
+    for (let i = 0; i < n; i++) {
+      const x = xmin + i * dx;
+      xs[i] = x;
+      const y = ev(fn, x);
+      ys[i] = isFinite(y) ? y : NaN;
+      if (isFinite(y)) maxAbs = Math.max(maxAbs, Math.abs(y));
+    }
+
+    const roots = [];
+    for (let i = 1; i < n; i++) {
+      const a = ys[i - 1], b = ys[i];
+      if (!isFinite(a) || !isFinite(b)) continue;
+      if (a === 0) { roots.push(xs[i - 1]); continue; }
+      if (a * b < 0) {
+        let lo = xs[i - 1], hi = xs[i], flo = a;
+        for (let k = 0; k < 40; k++) {
+          const m = 0.5 * (lo + hi);
+          const fm = ev(fn, m);
+          if (!isFinite(fm)) break;
+          if (flo * fm <= 0) { hi = m; } else { lo = m; flo = fm; }
+        }
+        roots.push(0.5 * (lo + hi));
+      }
+    }
+
+    const tol = maxAbs > 0 ? maxAbs * 1e-4 : 1e-9;
+    for (let i = 1; i < n - 1; i++) {
+      const a = Math.abs(ys[i - 1]), b = Math.abs(ys[i]), c = Math.abs(ys[i + 1]);
+      if (!isFinite(a) || !isFinite(b) || !isFinite(c)) continue;
+      if (b < a && b <= c && b < tol) {
+        let lo = xs[i - 1], hi = xs[i + 1];
+        for (let k = 0; k < 60; k++) {
+          const m1 = lo + (hi - lo) / 3;
+          const m2 = hi - (hi - lo) / 3;
+          if (Math.abs(ev(fn, m1)) < Math.abs(ev(fn, m2))) hi = m2; else lo = m1;
+        }
+        roots.push(0.5 * (lo + hi));
+      }
+    }
+
+    roots.sort((p, q) => p - q);
+    const dedupTol = (xmax - xmin) * 1e-4;
+    const out = [];
+    for (const r of roots) {
+      if (!isFinite(r)) continue;
+      if (!out.length || Math.abs(r - out[out.length - 1]) > dedupTol) out.push(r);
+    }
+    return out;
+  }
+
+  function mkAxis(title, color, spikes) {
+    const a = {
+      color: 'var(--body)',
+      tickfont: { size: 9, color: '#bda874', family: 'JetBrains Mono, monospace' },
+      gridcolor: 'rgba(255,184,74,0.1)',
+      gridwidth: 1,
+      zerolinecolor: 'rgba(255,184,74,0.3)',
+      zerolinewidth: 1.2,
+      linecolor: 'rgba(255,184,74,0.2)',
+      linewidth: 1,
+      showline: true,
+      mirror: false,
+      automargin: true,
+      ticks: 'outside',
+      tickcolor: 'rgba(255,184,74,0.3)',
+      ticklen: 4
+    };
+    if (title) a.title = { text: title, font: { size: 10, color, family: 'JetBrains Mono, monospace' } };
+    if (spikes) {
+      a.showspikes = true;
+      a.spikemode = 'across';
+      a.spikesnap = 'cursor';
+      a.spikecolor = 'rgba(255,184,74,0.4)';
+      a.spikethickness = 1;
+      a.spikedash = 'dot';
+    }
+    return a;
+  }
+
+  function vlines(c) {
+    return [{
+      type: 'line',
+      xref: 'x', x0: c, x1: c,
+      yref: 'paper', y0: 0, y1: 1,
+      line: { color: 'rgba(243,230,196,0.4)', width: 1.2, dash: 'dot' },
+      layer: 'below'
+    }];
+  }
+
+  function makeLayout(shapes, xRange, yRange) {
+    return {
+      showlegend: false,
+      margin: { l: 30, r: 16, t: 16, b: 24 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(10,9,4,0.6)',
+      font: { family: 'JetBrains Mono, monospace', size: 9, color: '#bda874' },
+      hovermode: 'closest',
+      hoverlabel: {
+        bgcolor: '#161208',
+        bordercolor: '#ffb84a',
+        font: { color: '#f3e6c4', size: 10, family: 'JetBrains Mono, monospace' }
+      },
+      dragmode: 'pan',
+      xaxis: Object.assign(mkAxis('x', '#bda874', true), { range: xRange, autorange: false, fixedrange: false }),
+      yaxis: Object.assign(mkAxis('y', '#bda874', false), { range: yRange, autorange: false, fixedrange: false }),
+      shapes: shapes || []
+    };
+  }
+
+  // Using scattergl for lightning-fast WebGL rendering
+  const LINE_BASE = { shape: 'linear', width: 2 };
+
+  function buildTraces() {
+    const c = S.c;
+    const fc  = ev(S.F,  c);
+    const d1c = ev(S.F1, c);
+    const d2c = ev(S.F2, c);
+
+    const half = (S.xmax - S.xmin) * 0.18 || 1;
+    const tx = [c - half, c + half];
+    const ty = tx.map(x => fc + d1c * (x - c));
+
+    const maxima = [], minima = [];
+    for (const r of S.roots1) {
+      const y = ev(S.F, r);
+      const k = ev(S.F2, r);
+      if (!isFinite(y)) continue;
+      if (k < -EPS) maxima.push({ x: r, y });
+      else if (k > EPS) minima.push({ x: r, y });
+    }
+
+    const infl = [];
+    for (const r of S.roots2) {
+      const y = ev(S.F, r);
+      if (isFinite(y)) infl.push({ x: r, y });
+    }
+
+    return [
+      {
+        x: S.xs, y: S.y0, type: 'scattergl', mode: 'lines', name: 'ƒ(x)',
+        line: Object.assign({}, LINE_BASE, { color: COL.f }),
+        connectgaps: false,
+        hovertemplate: 'ƒ(x)<br>x = %{x:.3f}<br>y = %{y:.3f}<extra></extra>'
+      },
+      {
+        x: S.xs, y: S.y1, type: 'scattergl', mode: 'lines', name: "ƒ′(x)",
+        line: Object.assign({}, LINE_BASE, { color: COL.d1 }),
+        connectgaps: false,
+        hovertemplate: "ƒ′(x)<br>x = %{x:.3f}<br>y = %{y:.3f}<extra></extra>"
+      },
+      {
+        x: S.xs, y: S.y2, type: 'scattergl', mode: 'lines', name: "ƒ″(x)",
+        line: Object.assign({}, LINE_BASE, { color: COL.d2 }),
+        connectgaps: false,
+        hovertemplate: "ƒ″(x)<br>x = %{x:.3f}<br>y = %{y:.3f}<extra></extra>"
+      },
+      {
+        x: tx, y: ty, type: 'scattergl', mode: 'lines', name: 'tangent',
+        line: { color: COL.accent, width: 1.5, dash: 'dash' },
+        hovertemplate: 'tangent<br>x = %{x:.3f}<br>y = %{y:.3f}<extra></extra>'
+      },
+      {
+        x: [c], y: [fc], type: 'scattergl', mode: 'markers', name: 'point ƒ',
+        marker: { color: COL.f, size: 9, line: { color: '#0a0904', width: 1.5 } },
+        hovertemplate: 'ƒ(c)<br>x = %{x:.4f}<br>y = %{y:.4f}<extra></extra>'
+      },
+      {
+        x: [c], y: [d1c], type: 'scattergl', mode: 'markers', name: "point ƒ′",
+        marker: { color: COL.d1, size: 9, line: { color: '#0a0904', width: 1.5 } },
+        hovertemplate: "ƒ′(c)<br>x = %{x:.4f}<br>y = %{y:.4f}<extra></extra>"
+      },
+      {
+        x: [c], y: [d2c], type: 'scattergl', mode: 'markers', name: "point ƒ″",
+        marker: { color: COL.d2, size: 9, line: { color: '#0a0904', width: 1.5 } },
+        hovertemplate: "ƒ″(c)<br>x = %{x:.4f}<br>y = %{y:.4f}<extra></extra>"
+      },
+      {
+        x: maxima.map(p => p.x), y: maxima.map(p => p.y),
+        type: 'scattergl', mode: 'markers', name: 'max',
+        marker: { color: COL.max, size: 10, symbol: 'circle-open', line: { width: 2 } },
+        hovertemplate: 'local max<br>x = %{x:.3f}<br>ƒ(x) = %{y:.3f}<extra></extra>'
+      },
+      {
+        x: minima.map(p => p.x), y: minima.map(p => p.y),
+        type: 'scattergl', mode: 'markers', name: 'min',
+        marker: { color: COL.min, size: 10, symbol: 'circle-open', line: { width: 2 } },
+        hovertemplate: 'local min<br>x = %{x:.3f}<br>ƒ(x) = %{y:.3f}<extra></extra>'
+      },
+      {
+        x: infl.map(p => p.x), y: infl.map(p => p.y),
+        type: 'scattergl', mode: 'markers', name: 'inflection',
+        marker: { color: COL.infl, size: 10, symbol: 'diamond-open', line: { width: 2 } },
+        hovertemplate: 'inflection<br>x = %{x:.3f}<br>ƒ(x) = %{y:.3f}<extra></extra>'
+      }
+    ];
+  }
+
+  function getVisibilityMap() {
+    const map = {};
+    document.querySelectorAll('.series-toggle').forEach(cb => { map[cb.dataset.group] = cb.checked; });
+    return map;
+  }
+
+  function applyVisibility() {
+    if (!plotReady) return;
+    const vis = getVisibilityMap();
+    const update = { visible: [] };
+    const idx = [];
+    for (const group in GROUPS) {
+      const on = !!vis[group];
+      for (const i of GROUPS[group]) {
+        idx.push(i);
+        update.visible.push(on);
+      }
+    }
+    Plotly.restyle(els.plot, { visible: update.visible }, idx);
+  }
+
+  function resampleView() {
+    if (!plotReady) return;
+    const full = els.plot._fullLayout;
+    if (!full || !full.xaxis || !full.xaxis.range || full.xaxis.range.length !== 2) return;
+    
+    const [a, b] = full.xaxis.range;
+    if (!isFinite(a) || !isFinite(b) || b <= a) return;
+
+    const span = lastSampledRange[1] - lastSampledRange[0];
+    if (isFinite(span) && span > 0) {
+      const d = Math.abs(a - lastSampledRange[0]) + Math.abs(b - lastSampledRange[1]);
+      if (d / span < 0.0015) return;
+    }
+
+    S.xmin = a;
+    S.xmax = b;
+    if (S.c < S.xmin) S.c = S.xmin;
+    if (S.c > S.xmax) S.c = S.xmax;
+    lastSampledRange = [a, b];
+
+    sample();
+    S.roots1 = findRoots(S.F1);
+    S.roots2 = findRoots(S.F2);
+
+    const data = buildTraces();
+    const indices = [0,1,2,3,4,5,6,7,8,9];
+
+    relayoutLock = true;
+    Plotly.restyle(els.plot, {
+      x: data.map(d => d.x),
+      y: data.map(d => d.y)
+    }, indices).then(() => { relayoutLock = false; }).catch(() => { relayoutLock = false; });
+
+    updatePanel();
+  }
+
+  function scheduleResample() {
+    if (resampleTimer) clearTimeout(resampleTimer);
+    resampleTimer = setTimeout(resampleView, 100);
+  }
+
+  function onRelayout(ev) {
+    if (relayoutLock) return;
+    if (!ev) return;
+    if (('xaxis.range[0]' in ev) || ('xaxis.range[1]' in ev) || (ev['xaxis.autorange'] === true)) {
+      scheduleResample();
+    }
+  }
+
+  async function fullRender() {
+    if (!parseAndBuild()) return;
+
+    S.xmin = INITIAL_MIN;
+    S.xmax = INITIAL_MAX;
+    lastSampledRange = [S.xmin, S.xmax];
+
+    sample();
+    S.roots1 = findRoots(S.F1);
+    S.roots2 = findRoots(S.F2);
+    updateExprDisplay();
+
+    const data = buildTraces();
+    const layout = makeLayout(vlines(S.c), [S.xmin, S.xmax], [INITIAL_MIN, INITIAL_MAX]);
+
+    if (!plotReady) {
+      await Plotly.newPlot(els.plot, data, layout, CONFIG);
+      plotReady = true;
+      els.plot.on('plotly_click', onPlotClick);
+      els.plot.on('plotly_relayout', onRelayout);
+    } else {
+      relayoutLock = true;
+      await Plotly.react(els.plot, data, layout, CONFIG);
+      relayoutLock = false;
+    }
+
+    applyVisibility();
+    updatePanel();
+  }
+
+  async function resetView() {
+    if (!plotReady) return;
+    S.xmin = INITIAL_MIN;
+    S.xmax = INITIAL_MAX;
+    lastSampledRange = [S.xmin, S.xmax];
+
+    sample();
+    S.roots1 = findRoots(S.F1);
+    S.roots2 = findRoots(S.F2);
+
+    const data = buildTraces();
+    const layout = makeLayout(vlines(S.c), [S.xmin, S.xmax], [INITIAL_MIN, INITIAL_MAX]);
+
+    relayoutLock = true;
+    await Plotly.react(els.plot, data, layout, CONFIG);
+    relayoutLock = false;
+
+    applyVisibility();
+    updatePanel();
+  }
+
+  function updateC() {
+    if (!plotReady) return;
+
+    const c = S.c;
+    const fc  = ev(S.F,  c);
+    const d1c = ev(S.F1, c);
+    const d2c = ev(S.F2, c);
+
+    const half = (S.xmax - S.xmin) * 0.18 || 1;
+    const tx = [c - half, c + half];
+    const ty = tx.map(x => fc + d1c * (x - c));
+
+    relayoutLock = true;
+    Plotly.update(
+      els.plot,
+      { x: [tx, [c], [c], [c]], y: [ty, [fc], [d1c], [d2c]] },
+      { shapes: vlines(c) },
+      [IX.tangent, IX.pF, IX.pD1, IX.pD2]
+    ).then(() => { relayoutLock = false; }).catch(() => { relayoutLock = false; });
+
+    updatePanel();
+  }
+
+  function scheduleC() {
+    if (cRaf) return;
+    cRaf = requestAnimationFrame(() => { cRaf = null; updateC(); });
+  }
+
+  function updateExprDisplay() {
+    els.exprDisp.innerHTML =
+      `<div><span style="color:${COL.f}">ƒ(x)</span>&nbsp; = ${esc(S.str.f)}</div>` +
+      `<div><span style="color:${COL.d1}">ƒ′(x)</span> = ${esc(S.str.f1)}</div>` +
+      `<div><span style="color:${COL.d2}">ƒ″(x)</span> = ${esc(S.str.f2)}</div>`;
+  }
+
+  function updatePanel() {
+    const c = S.c;
+    const f  = ev(S.F,  c);
+    const d1 = ev(S.F1, c);
+    const d2 = ev(S.F2, c);
+
+    let fState, fConc;
+
+    if (!isFinite(d1))   fState = { text: '· undefined', cls: B.neutral };
+    else if (d1 > EPS)   fState = { text: '▲ Increasing', cls: B.up };
+    else if (d1 < -EPS)  fState = { text: '▼ Decreasing', cls: B.down };
+    else                 fState = { text: '● Stationary', cls: B.flat };
+
+    if (!isFinite(d2))   fConc = { text: '· concavity n/a', cls: B.neutral };
+    else if (d2 > EPS)   fConc = { text: '∪ Concave Upward', cls: B.up };
+    else if (d2 < -EPS)  fConc = { text: '∩ Concave Downward', cls: B.down };
+    else                 fConc = { text: '◆ Inflection Point', cls: B.violet };
+
+    const tangentNote = (isFinite(f) && isFinite(d1))
+      ? `Tangent line: y = ${fmt(f)} ${d1 < 0 ? '−' : '+'} ${fmt(Math.abs(d1))}·(x − ${fmt(c)})`
+      : 'Tangent line unavailable at this point.';
+
+    const monotoneNote = !isFinite(d1)
+      ? 'The derivative is undefined here, so monotonicity cannot be classified.'
+      : d1 > EPS
+        ? `ƒ is increasing at x = ${fmt(c)} because ƒ′(c) = ${fmt(d1)} > 0.`
+        : d1 < -EPS
+          ? `ƒ is decreasing at x = ${fmt(c)} because ƒ′(c) = ${fmt(d1)} < 0.`
+          : `ƒ is momentarily stationary at x = ${fmt(c)} (ƒ′(c) ≈ 0) — a possible local extremum.`;
+
+    const concaveNote = !isFinite(d2)
+      ? 'The second derivative is undefined here, so concavity cannot be classified.'
+      : d2 > EPS
+        ? `The curve is concave upward at x = ${fmt(c)} because ƒ″(c) = ${fmt(d2)} > 0.`
+        : d2 < -EPS
+          ? `The curve is concave downward at x = ${fmt(c)} because ƒ″(c) = ${fmt(d2)} < 0.`
+          : `ƒ″(c) ≈ 0 — this may be an inflection point.`;
+
+    els.analysis.innerHTML = `
+      <div class="panel space-y-2">
+        <h3>Point Analysis</h3>
+        <div class="flex flex-wrap items-center justify-between gap-2 -mt-1 mb-1">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-[10px] font-bold" style="color:${COL.f}">ƒ(x)</span>
+          </div>
+          <span class="font-mono text-[9px] text-[var(--ink)]">
+            c = ${fmt(c, 4)}
+          </span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-1">
+          <div class="stat-box">
+            <div class="stat-label">Value ƒ(c)</div>
+            <div class="stat-value">${fmt(f)}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Slope ƒ′(c)</div>
+            <div class="stat-value">${fmt(d1)}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Concavity ƒ″(c)</div>
+            <div class="stat-value">${fmt(d2)}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Tangent slope</div>
+            <div class="stat-value">${fmt(d1)}</div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-1 pt-1">
+          <span class="badge ${fState.cls}">${fState.text}</span>
+          <span class="badge ${fConc.cls}">${fConc.text}</span>
+        </div>
+
+        <div class="space-y-1 text-[9px] text-[var(--body)] leading-tight font-mono pt-1.5 border-t border-[var(--line)]">
+          <p class="pt-1">${esc(monotoneNote)}</p>
+          <p>${esc(concaveNote)}</p>
+          <p class="text-[var(--dim)] mt-1">${esc(tangentNote)}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  function setC(v, fromInput) {
+    v = Math.min(S.xmax, Math.max(S.xmin, v));
+    S.c = v;
+    els.cSlider.value = v;
+    if (!fromInput) els.cInput.value = Number(v.toFixed(4));
+    els.cHint.textContent = `in [${fmt(S.xmin)}, ${fmt(S.xmax)}]`;
+    scheduleC();
+  }
+
+  function onPlotClick(e) {
+    if (!e || !e.points || !e.points.length) return;
+    const p = e.points[0];
+    if (typeof p.x === 'number' && isFinite(p.x)) setC(p.x);
+  }
+
+  els.plotBtn.addEventListener('click', fullRender);
+  els.resetBtn.addEventListener('click', resetView);
+
+  els.fnInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); fullRender(); }
+  });
+
+  els.cSlider.addEventListener('input', () => {
+    const v = parseFloat(els.cSlider.value);
+    S.c = v;
+    els.cInput.value = Number(v.toFixed(4));
+    els.cHint.textContent = `in [${fmt(S.xmin)}, ${fmt(S.xmax)}]`;
+    scheduleC();
+  });
+
+  els.cInput.addEventListener('input', () => {
+    const v = parseFloat(els.cInput.value);
+    if (!isFinite(v)) return;
+    setC(v, true);
+  });
+
+  els.cInput.addEventListener('blur', () => {
+    const v = parseFloat(els.cInput.value);
+    if (!isFinite(v)) {
+      els.cInput.value = Number(S.c.toFixed(4));
+    } else {
+      setC(v);
+      els.cInput.value = Number(S.c.toFixed(4));
+    }
+  });
+
+  document.querySelectorAll('.series-toggle').forEach(cb => {
+    cb.addEventListener('change', applyVisibility);
+  });
+
+  els.allOn.addEventListener('click', () => {
+    document.querySelectorAll('.series-toggle').forEach(cb => { cb.checked = true; });
+    applyVisibility();
+  });
+
+  els.allOff.addEventListener('click', () => {
+    document.querySelectorAll('.series-toggle').forEach(cb => { cb.checked = false; });
+    applyVisibility();
+  });
+
+  (function boot() {
+    S.n = FIXED_RES;
+    S.c = 1;
+    els.cInput.value = 1;
+    els.cSlider.value = 1;
+    els.cHint.textContent = `in [${INITIAL_MIN}, ${INITIAL_MAX}]`;
+    fullRender();
+  })();
+
+  function tickClock(){
+    const d = new Date(), z = n => String(n).padStart(2,'0');
+    const el = document.getElementById('clock'); 
+    if (el) el.textContent = z(d.getUTCHours())+':'+z(d.getUTCMinutes())+':'+z(d.getUTCSeconds())+'Z';
+  }
+  tickClock(); setInterval(tickClock, 1000);
+
+  let rRaf = null;
+  const resizeObserver = new ResizeObserver(() => {
+    if (rRaf) return;
+    rRaf = requestAnimationFrame(() => {
+      rRaf = null;
+      if (plotReady) Plotly.Plots.resize(els.plot);
+    });
+  });
+  
+  if (els.plot.parentElement) {
+    resizeObserver.observe(els.plot.parentElement);
+  }
+
+})();
+</script>
+</body>
+</html>
