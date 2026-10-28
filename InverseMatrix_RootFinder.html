@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inverse Matrix / Solver</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0904; --panel:#161208; --panel2:#1d170b; --ink:#ffb84a; --dim:#7a5f30; --paper:#f3e6c4;
+  --body:#bda874; --green:#52ff8a; --red:#ff5252;
+  --line:rgba(255,184,74,.18); --line2:rgba(255,184,74,.32);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;line-height:1.5;background:var(--bg);color:var(--ink);overflow:hidden;-webkit-font-smoothing:antialiased}
+::selection{background:var(--ink);color:var(--bg)}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh;position:relative}
+
+/* CRT overlays */
+.scan{position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(180deg,rgba(255,184,74,0) 0,rgba(255,184,74,0) 2px,rgba(255,184,74,.04) 2px,rgba(255,184,74,.04) 3px);mix-blend-mode:overlay}
+.grain{position:fixed;inset:0;pointer-events:none;z-index:9998;opacity:.08;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+.vignette{position:fixed;inset:0;pointer-events:none;z-index:9997;background:radial-gradient(ellipse at 50% 50%,transparent 45%,rgba(0,0,0,.45))}
+@keyframes blink{50%{opacity:.3}}
+
+/* ---------- Top bar ---------- */
+.topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;background:rgba(10,9,4,.96);border-bottom:1px solid var(--line2);position:relative;z-index:10;font-size:12px;letter-spacing:.04em}
+.brand{font-weight:700;font-size:15px;letter-spacing:.06em;display:flex;align-items:center;gap:9px;margin-right:10px;white-space:nowrap;color:var(--ink);text-transform:uppercase}
+.brand::before{content:"";width:9px;height:9px;background:var(--green);box-shadow:0 0 12px var(--green);animation:blink 1.4s infinite}
+.brand span{color:var(--dim);font-weight:400}
+.spacer{flex:1}
+.clock{color:var(--dim);font-size:11px;white-space:nowrap;margin-left:6px}
+.clock b{color:var(--ink);font-weight:500}
+
+button{font-family:inherit;font-size:12px;font-weight:500;letter-spacing:.05em;color:var(--dim);background:none;border:1px solid transparent;padding:7px 10px;border-radius:0;cursor:pointer;transition:color .15s,background .15s,border-color .15s,box-shadow .2s;white-space:nowrap}
+button:hover{color:var(--ink)}
+button:active{transform:translateY(1px)}
+button.primary{border-color:var(--ink);color:var(--ink);text-transform:uppercase;padding:8px 16px}
+button.primary::before{content:"$ ";color:var(--green)}
+button.primary:hover{background:var(--ink);color:var(--bg);box-shadow:0 0 24px rgba(255,184,74,.4)}
+button.primary:hover::before{color:var(--bg)}
+button.ghost{border-color:var(--line2);color:var(--body)}
+button.ghost:hover{border-color:var(--ink);color:var(--ink)}
+
+/* ---------- Layout ---------- */
+.main-content{flex:1;overflow-y:auto;padding:30px;display:flex;justify-content:center;}
+.container{width:100%;max-width:900px;}
+.view-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;border-bottom:1px solid var(--line2);padding-bottom:12px;}
+.view-title{font-size:16px;color:var(--ink);text-transform:uppercase;letter-spacing:.1em;font-weight:600;margin:0;display:flex;align-items:center;gap:10px;}
+.view-title::before{content:"»";color:var(--dim);}
+.subtitle{color:var(--body);font-size:12px;margin-bottom:20px;display:block;}
+
+/* Panels / Cards */
+.panel{background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:18px 20px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,.4);}
+.panel h3{margin:0 0 16px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);font-weight:500;display:flex;align-items:center;gap:10px;border-bottom:1px dashed var(--line);padding-bottom:10px;}
+.panel h3::before{content:"╋";color:var(--ink);}
+
+/* Inputs */
+.field{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+.field label{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.14em;font-weight:600;}
+select, input[type="text"]{font-family:inherit;font-size:14px;color:var(--paper);background:var(--bg);border:1px solid var(--line2);padding:8px 10px;border-radius:0;outline:none;transition:border-color .15s, box-shadow .15s;}
+select:hover, select:focus, input[type="text"]:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(255,184,74,.12);}
+select option{background:var(--panel);color:var(--ink);}
+
+.eq-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.eq-row input{width:60px;text-align:center;padding:8px 4px;font-size:15px;}
+.var{font-family:'Instrument Serif',serif;font-style:italic;font-size:1.3rem;color:var(--paper);}
+.op{color:var(--dim);font-size:1rem;}
+.hint{font-size:11px;color:var(--dim);margin:6px 0 16px;}
+
+/* Terminal Box */
+.term{background:var(--panel);border:1px solid rgba(255,184,74,.3);border-radius:6px;overflow:hidden;box-shadow:0 0 40px rgba(255,184,74,.05);}
+.term-head{display:flex;gap:6px;align-items:center;padding:8px 12px;background:rgba(255,184,74,.06);border-bottom:1px solid var(--line);font-size:10.5px;color:var(--dim);letter-spacing:.05em}
+.term-head .dots{display:flex;gap:5px;margin-right:10px}
+.term-head .dots i{width:8px;height:8px;border-radius:50%}
+.term-head .dots i:nth-child(1){background:var(--red)}
+.term-head .dots i:nth-child(2){background:var(--ink)}
+.term-head .dots i:nth-child(3){background:var(--green)}
+.term-body{padding:20px;}
+
+/* Steps */
+.step{background:var(--panel2);border-radius:6px;padding:16px;margin-bottom:16px;border-left:3px solid var(--dim);}
+.step.answer{border-left-color:var(--green);background:linear-gradient(135deg, rgba(82,255,138,.08), transparent);box-shadow: inset 0 0 20px rgba(82,255,138,.05);}
+.step.error{border-left-color:var(--red);background:linear-gradient(135deg, rgba(255,82,82,.08), transparent);}
+.step-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.badge{flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;}
+.step.answer .badge{background:var(--green);}
+.step.error .badge{background:var(--red);}
+.step-head h2{margin:0;font-size:0.85rem;color:var(--paper);text-transform:uppercase;letter-spacing:.05em;}
+.step-body p{margin:0 0 12px;font-size:12px;color:var(--body);line-height:1.6;}
+
+/* Math Formatting */
+.mathline{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 0;font-size:0.9rem;overflow-x:auto;}
+.matrix{display:inline-flex;align-items:stretch;vertical-align:middle;margin:2px 4px;}
+.matrix .brk{width:6px;border:1.5px solid var(--ink);border-radius:2px;flex-shrink:0;}
+.matrix .brk.l{border-right:none;border-top-right-radius:0;border-bottom-right-radius:0;}
+.matrix .brk.r{border-left:none;border-top-left-radius:0;border-bottom-left-radius:0;}
+.matrix table{border-collapse:collapse;margin:0 6px;}
+.matrix td{padding:6px 10px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.2;white-space:nowrap;color:var(--paper);}
+.matrix td.divider{border-left:1.5px solid var(--line2);padding-left:14px;}
+.matrix td.changed{background:rgba(255,184,74,.15);color:var(--ink);font-weight:700;box-shadow:inset 0 0 0 1.2px var(--ink);border-radius:3px;}
+
+.frac{display:inline-flex;align-items:center;vertical-align:middle;font-size:0.9em;line-height:1;}
+.frac .sign{padding-right:1px;}
+.frac .stack{display:inline-block;text-align:center;vertical-align:middle;}
+.frac .num{display:block;border-bottom:1.1px solid var(--paper);padding:0 2px;}
+.frac .den{display:block;padding:0 2px;}
+
+.eqs{font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.8;padding:10px;background:var(--bg);border:1px solid var(--line);border-radius:4px;color:var(--paper);}
+.eqs .v{font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;color:var(--ink);}
+.eqs div{padding:2px 0;}
+
+.op-label{display:block;margin:12px 0 10px;padding:10px 14px;background:rgba(255,184,74,.05);border:1px solid var(--line2);border-left:3px solid var(--ink);border-radius:0;font-size:12px;color:var(--body);}
+.op-label .op-head{font-weight:700;color:var(--dim);margin-bottom:6px;font-size:10px;text-transform:uppercase;letter-spacing:.1em;}
+.op-label .op-line{font-weight:600;padding:2px 0;color:var(--ink);}
+
+.answer-line{font-family:'JetBrains Mono',monospace;font-size:1.1rem;color:var(--green);padding:10px 0;letter-spacing:.05em;}
+.answer-line .v{font-family:'Instrument Serif',serif;font-style:italic;font-size:1.4rem;}
+.answer-line .val{font-weight:700;}
+.answer-line .sep{color:var(--dim);margin:0 10px;}
+
+.empty{text-align:center;color:var(--dim);padding:30px;font-size:13px;letter-spacing:.05em;}
+
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#3a2e18}
+::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+</style>
+</head>
+<body>
+
+<div class="scan"></div>
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<div class="app">
+  <header class="topbar">
+    <button class="ghost" onclick="window.location.href='index.html#semester-02'" style="margin-right: 10px;">↩ back</button>
+    <div class="brand">Inverse Matrix <span>/ solver</span></div>
+    <div class="spacer"></div>
+    <div class="clock">SYS · <b id="clock">--:--:--</b></div>
+  </header>
+
+  <div class="main-content">
+    <div class="container">
+      <div class="view-header">
+        <h1 class="view-title">System Solver</h1>
+      </div>
+      <span class="subtitle">Solve a 2×2 or 3×3 system using <em>X = A⁻¹B</em>, with row operations and changes highlighted.</span>
+
+      <div class="panel">
+        <h3>Enter the system</h3>
+        <div class="field">
+          <label for="nVars">Variables</label>
+          <select id="nVars">
+            <option value="2">2 (x, y)</option>
+            <option value="3" selected>3 (x, y, z)</option>
+          </select>
+        </div>
+        <div id="inputArea"></div>
+        <p class="hint">Integers (2), decimals (0.5) or fractions (1/2). Minus sign for negatives.</p>
+        <button class="primary" id="solveBtn">solve system</button>
+      </div>
+
+      <div class="term">
+        <div class="term-head"><div class="dots"><i></i><i></i><i></i></div> ~/solver — output.log</div>
+        <div class="term-body" id="output">
+          <div class="empty">$ Awaiting input...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- fraction arithmetic ---------- */
+function gcd(a,b){a=Math.abs(a);b=Math.abs(b);while(b){const t=b;b=a%b;a=t;}return a;}
+function Frac(n,d){
+  if(d===undefined)d=1;
+  if(isNaN(n)||isNaN(d)){this.n=0;this.d=1;return;}
+  if(d===0)throw new Error('Division by zero');
+  if(d<0){n=-n;d=-d;}
+  const g=gcd(Math.abs(n),Math.abs(d))||1;
+  this.n=n/g;this.d=d/g;
+}
+Frac.prototype.add=function(o){return new Frac(this.n*o.d+o.n*this.d,this.d*o.d);};
+Frac.prototype.sub=function(o){return new Frac(this.n*o.d-o.n*this.d,this.d*o.d);};
+Frac.prototype.mul=function(o){return new Frac(this.n*o.n,this.d*o.d);};
+Frac.prototype.div=function(o){return new Frac(this.n*o.d,this.d*o.n);};
+Frac.prototype.neg=function(){return new Frac(-this.n,this.d);};
+Frac.prototype.isZero=function(){return this.n===0;};
+Frac.prototype.isNeg=function(){return this.n<0;};
+Frac.prototype.isOne=function(){return this.n===1&&this.d===1;};
+
+function parseNum(s){
+  s=String(s).trim();
+  if(s==='')return new Frac(0);
+  if(s.indexOf('/')!==-1){
+    const p=s.split('/');
+    const a=parseFloat(p[0]),b=parseFloat(p[1]);
+    if(isNaN(a)||isNaN(b)||b===0||!isFinite(a)||!isFinite(b))throw new Error('bad');
+    return new Frac(Math.round(a*1e6),Math.round(b*1e6));
+  }
+  if(s.indexOf('.')!==-1){
+    const dec=s.split('.')[1].length;
+    const mult=Math.pow(10,dec);
+    const v=parseFloat(s);
+    if(isNaN(v)||!isFinite(v))throw new Error('bad');
+    return new Frac(Math.round(v*mult),mult);
+  }
+  const v=parseInt(s,10);
+  if(isNaN(v)||!isFinite(v))throw new Error('bad');
+  return new Frac(v);
+}
+
+/* ---------- HTML renderers ---------- */
+function renderFrac(f){
+  if(!f||f.n===undefined||f.d===undefined)return '?';
+  if(f.d===1)return String(f.n);
+  const sign=f.n<0?'\u2212':'';
+  const num=Math.abs(f.n);
+  return '<span class="frac">'+
+    (sign?'<span class="sign">'+sign+'</span>':'')+
+    '<span class="stack"><span class="num">'+num+'</span>'+
+    '<span class="den">'+f.d+'</span></span></span>';
+}
+
+function renderMatrix(M,dividerAfter,highlight){
+  let t='<table>';
+  for(let i=0;i<M.length;i++){
+    t+='<tr>';
+    for(let j=0;j<M[i].length;j++){
+      const cls=[];
+      if(dividerAfter!==undefined&&j===dividerAfter)cls.push('divider');
+      if(highlight&&highlight[i]&&highlight[i][j])cls.push('changed');
+      t+='<td'+(cls.length?' class="'+cls.join(' ')+'"':'')+'>'+renderFrac(M[i][j])+'</td>';
+    }
+    t+='</tr>';
+  }
+  t+='</table>';
+  return '<span class="matrix"><span class="brk l"></span>'+t+'<span class="brk r"></span></span>';
+}
+
+function renderColumn(items){return renderMatrix(items.map(x=>[x]));}
+
+function renderVariableColumn(vars){
+  let t='<table>';
+  for(let i=0;i<vars.length;i++)t+='<tr><td><span class="v">'+vars[i]+'</span></td></tr>';
+  t+='</table>';
+  return '<span class="matrix"><span class="brk l"></span>'+t+'<span class="brk r"></span></span>';
+}
+
+function renderSystem(n,A,B){
+  const vars=['x','y','z'];
+  let html='<div class="eqs">';
+  for(let i=0;i<n;i++){
+    let line='';
+    for(let j=0;j<n;j++){
+      const c=A[i][j];
+      if(c.isZero())continue;
+      const abs=new Frac(Math.abs(c.n),c.d);
+      let coef;
+      if(abs.isOne())coef='';
+      else if(abs.d===1)coef=String(abs.n);
+      else coef=renderFrac(abs);
+      const term=coef+'<span class="v">'+vars[j]+'</span>';
+      if(line==='')line=(c.isNeg()?'\u2212':'')+term;
+      else line+=(c.isNeg()?' \u2212 ':' + ')+term;
+    }
+    if(line==='')line='0';
+    html+='<div>'+line+' = '+renderFrac(B[i])+'</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
+function subDigits(n){
+  const map='₀₁₂₃₄₅₆₇₈₉';
+  return String(n).split('').map(d=>{const i=parseInt(d,10);return isNaN(i)?d:map[i];}).join('');
+}
+
+/* ---------- Gauss–Jordan with combined eliminations ---------- */
+function cloneMat(M){return M.map(r=>r.slice());}
+function computeHighlight(prev,curr){
+  const h=[];
+  for(let i=0;i<curr.length;i++){
+    h.push([]);
+    for(let j=0;j<curr[i].length;j++){
+      if(!prev){h[i].push(false);continue;}
+      const p=prev[i][j],c=curr[i][j];
+      h[i].push(p.n!==c.n||p.d!==c.d);
+    }
+  }
+  return h;
+}
+
+function gaussJordan(n,A){
+  let M=A.map((row,i)=>{
+    const idRow=[];
+    for(let j=0;j<n;j++)idRow.push(new Frac(i===j?1:0));
+    return row.concat(idRow);
+  });
+  const steps=[];
+
+  for(let col=0;col<n;col++){
+    // pivot swap
+    if(M[col][col].isZero()){
+      let sw=-1;
+      for(let r=col+1;r<n;r++){if(!M[r][col].isZero()){sw=r;break;}}
+      if(sw===-1)return{singular:true,steps:steps};
+      const prev=cloneMat(M);
+      const tmp=M[col];M[col]=M[sw];M[sw]=tmp;
+      steps.push({
+        ops:['R'+subDigits(col+1)+' \u2194 R'+subDigits(sw+1)],
+        title:'Pivot operation',
+        desc:'Interchange rows '+(col+1)+' and '+(sw+1)+' to bring a non-zero pivot into position.',
+        mat:cloneMat(M),
+        highlight:computeHighlight(prev,M)
+      });
+    }
+
+    // pivot scale
+    const pivot=M[col][col];
+    if(!pivot.isOne()){
+      const prev=cloneMat(M);
+      for(let j=0;j<2*n;j++)M[col][j]=M[col][j].div(pivot);
+      const inv=new Frac(1).div(pivot);
+      steps.push({
+        ops:['R'+subDigits(col+1)+' \u2192 '+renderFrac(inv)+' \u00b7 R'+subDigits(col+1)],
+        title:'Pivot operation',
+        desc:'Divide row '+(col+1)+' by '+renderFrac(pivot)+' so the pivot becomes 1.',
+        mat:cloneMat(M),
+        highlight:computeHighlight(prev,M)
+      });
+    }
+
+    // combined eliminations
+    const prev=cloneMat(M);
+    const ops=[];
+    let anyChange=false;
+    for(let row=0;row<n;row++){
+      if(row===col)continue;
+      const f=M[row][col];
+      if(f.isZero())continue;
+      anyChange=true;
+      for(let j=0;j<2*n;j++)M[row][j]=M[row][j].sub(f.mul(M[col][j]));
+      if(f.isNeg()){
+        ops.push('R'+subDigits(row+1)+' \u2192 R'+subDigits(row+1)+' + '+
+                 renderFrac(f.neg())+' \u00b7 R'+subDigits(col+1));
+      }else{
+        ops.push('R'+subDigits(row+1)+' \u2192 R'+subDigits(row+1)+' \u2212 '+
+                 renderFrac(f)+' \u00b7 R'+subDigits(col+1));
+      }
+    }
+    if(anyChange){
+      steps.push({
+        ops:ops,
+        title:'Elimination',
+        desc:'Use the pivot in row '+(col+1)+' to eliminate the other entries in column '+(col+1)+'.',
+        mat:cloneMat(M),
+        highlight:computeHighlight(prev,M)
+      });
+    }
+  }
+
+  const inv=M.map(r=>r.slice(n));
+  return {singular:false,inv:inv,steps:steps};
+}
+
+/* ---------- build solution ---------- */
+function renderOpLabel(s){
+  let out='<div class="op-label">';
+  out+='<div class="op-head">'+(s.title||'Operation')+'</div>';
+  s.ops.forEach(o=>{out+='<div class="op-line">'+o+'</div>';});
+  out+='</div>';
+  return out;
+}
+
+function buildSolution(n,A,B){
+  let stepNum=0;
+  const step=(title,body,cls)=>{
+    stepNum++;
+    return '<section class="step '+(cls||'')+'">'+
+      '<div class="step-head"><span class="badge">'+stepNum+'</span>'+
+      '<h2>'+title+'</h2></div>'+
+      '<div class="step-body">'+body+'</div></section>';
+  };
+  const vars=['x','y','z'].slice(0,n);
+  let html='';
+
+  // Step 1
+  html+=step('Write the system in matrix form <em>AX = B</em>',
+    '<p>The given system is:</p>'+renderSystem(n,A,B)+
+    '<p>In matrix form:</p>'+
+    '<div class="mathline">'+renderMatrix(A)+renderVariableColumn(vars)+
+    '<span style="font-size:1rem;">=</span>'+renderColumn(B)+'</div>');
+
+  // Step 2
+  const aug=A.map((row,i)=>{
+    const idRow=[];
+    for(let j=0;j<n;j++)idRow.push(new Frac(i===j?1:0));
+    return row.concat(idRow);
+  });
+  html+=step('Form the augmented matrix [A : I]',
+    '<p>To find <em>A</em><sup>\u22121</sup>, we form <em>[A : I]</em> and reduce <em>A</em> to <em>I</em>.</p>'+
+    '<div class="mathline">[A : I] = '+renderMatrix(aug,n)+'</div>');
+
+  // Row reduction
+  const res=gaussJordan(n,A);
+
+  if(res.singular){
+    let body='';
+    res.steps.forEach(s=>{
+      body+=renderOpLabel(s);
+      body+='<p>'+s.desc+'</p>';
+      body+='<div class="mathline">'+renderMatrix(s.mat,n,s.highlight)+'</div>';
+    });
+    if(body)html+=step('Row reduction (halted)',body);
+    return html+'<section class="step error">'+
+      '<div class="step-head"><span class="badge">!</span>'+
+      '<h2>No unique solution</h2></div>'+
+      '<div class="step-body"><p>A pivot column contained all zeros, so |A| = 0 and <em>A</em><sup>\u22121</sup> does not exist.</p>'+
+      '</div></section>';
+  }
+
+  let gaussBody='<p>Apply row operations to transform [A : I] into [I : A\u207B\u00B9]. '+
+    'Changed cells are highlighted in <span style="background:rgba(255,184,74,.2);padding:2px 6px;'+
+    'border-radius:3px;font-weight:600;color:var(--ink);">amber</span>.</p>';
+
+  res.steps.forEach(s=>{
+    gaussBody+=renderOpLabel(s);
+    gaussBody+='<p>'+s.desc+'</p>';
+    gaussBody+='<div class="mathline">'+renderMatrix(s.mat,n,s.highlight)+'</div>';
+  });
+  html+=step('Reduce [A : I] to [I : A\u207B\u00B9] by row operations',gaussBody);
+
+  // Inverse
+  html+=step('Read off the inverse <em>A</em><sup>\u22121</sup>',
+    '<p>The left half is now <em>I</em>, so the right half is the inverse:</p>'+
+    '<div class="mathline"><em>A</em><sup>\u22121</sup> = '+renderMatrix(res.inv)+'</div>');
+
+  // X = A⁻¹B
+  const X=res.inv.map(row=>row.reduce((s,x,k)=>s.add(x.mul(B[k])),new Frac(0)));
+  html+=step('Compute <em>X = A</em><sup>\u22121</sup><em>B</em>',
+    '<div class="mathline"><em>X</em> = <em>A</em><sup>\u22121</sup><em>B</em> = '+
+    renderMatrix(res.inv)+renderColumn(B)+' = '+renderColumn(X)+'</div>');
+
+  // Answer
+  const ansHtml=vars.map((v,i)=>'<span class="v">'+v+'</span> = <span class="val">'+
+    renderFrac(X[i])+'</span>').join('<span class="sep">,</span>');
+  html+='<section class="step answer">'+
+    '<div class="step-head"><span class="badge">\u2713</span>'+
+    '<h2>Solution</h2></div>'+
+    '<div class="step-body"><div class="answer-line">'+ansHtml+'</div></div></section>';
+
+  // Verification
+  const check=A.map(row=>row.reduce((s,x,k)=>s.add(x.mul(X[k])),new Frac(0)));
+  const ok=check.every((f,i)=>f.n===B[i].n&&f.d===B[i].d);
+  html+=step('Verification',
+    '<div class="mathline"><em>AX</em> = '+renderMatrix(A)+renderColumn(X)+' = '+renderColumn(check)+'</div>'+
+    '<p>'+(ok?'This equals <em>B</em>, so the solution is verified. \u2713':'Check did not match exactly.')+'</p>');
+
+  return html;
+}
+
+/* ---------- UI ---------- */
+const DEFAULTS={
+  2:{A:[['2','3'],['4','-1']],B:['13','5']},
+  3:{A:[['1','1','1'],['1','2','3'],['1','3','4']],B:['7','16','22']}
+};
+
+function generateInputs(){
+  const n=parseInt(document.getElementById('nVars').value,10);
+  const vars=['x','y','z'].slice(0,n);
+  const d=DEFAULTS[n];
+  let html='';
+  for(let i=0;i<n;i++){
+    html+='<div class="eq-row">';
+    for(let j=0;j<n;j++){
+      html+='<input type="text" id="a'+i+j+'" value="'+d.A[i][j]+'" inputmode="text" />';
+      html+='<span class="var">'+vars[j]+'</span>';
+      if(j<n-1)html+='<span class="op">+</span>';
+    }
+    html+='<span class="op">=</span>';
+    html+='<input type="text" id="b'+i+'" value="'+d.B[i]+'" inputmode="text" />';
+    html+='</div>';
+  }
+  document.getElementById('inputArea').innerHTML=html;
+  document.getElementById('output').innerHTML='<div class="empty">$ Awaiting input...</div>';
+}
+
+function solveSystem(){
+  const n=parseInt(document.getElementById('nVars').value,10);
+  const A=[],B=[];
+  try{
+    for(let i=0;i<n;i++){
+      const row=[];
+      for(let j=0;j<n;j++)row.push(parseNum(document.getElementById('a'+i+j).value));
+      A.push(row);
+      B.push(parseNum(document.getElementById('b'+i).value));
+    }
+  }catch(e){
+    alert('Please enter valid numbers (integers, decimals like 0.5, or fractions like 1/2).');
+    return;
+  }
+  const out=document.getElementById('output');
+  try{out.innerHTML=buildSolution(n,A,B);}
+  catch(err){
+    out.innerHTML='<div class="step error"><div class="step-head"><span class="badge">!</span><h2>Error</h2></div><div class="step-body"><p>'+err.message+'</p></div></div>';
+    console.error(err);
+  }
+  out.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+document.getElementById('nVars').addEventListener('change',generateInputs);
+document.getElementById('solveBtn').addEventListener('click',solveSystem);
+generateInputs();
+
+function tickClock(){
+  const d = new Date(), z = n => String(n).padStart(2,'0');
+  const el = document.getElementById('clock'); 
+  if (el) el.textContent = z(d.getUTCHours())+':'+z(d.getUTCMinutes())+':'+z(d.getUTCSeconds())+'Z';
+}
+tickClock(); setInterval(tickClock, 1000);
+</script>
+</body>
+</html>
